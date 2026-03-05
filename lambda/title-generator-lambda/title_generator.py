@@ -154,10 +154,13 @@ def generate_title(extracted_text, current_title):
         backoff_factor=2
     )['Account']
 
-    # Define the model name and version
-    model_name = 'us.amazon.nova-pro-v1:0'
-    # Construct the model_id
-    model_id = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_name}'
+    # Use configurable model ID from environment variable
+    model_name = os.environ.get('BEDROCK_MODEL_ID_VISION', 'qwen.qwen3-vl-235b-a22b')
+    # Construct the model_id (resolve inference profile ARN for region-prefixed IDs)
+    if model_name.startswith(('us.', 'eu.', 'ap.')):
+        model_id = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_name}'
+    else:
+        model_id = model_name
     print(f"(generate_title) Model ID: {model_id}")
 
     client = boto3.client('bedrock-runtime', region_name=region)
