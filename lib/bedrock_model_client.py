@@ -6,7 +6,7 @@ by using the unified Converse API instead of model-specific InvokeModel payloads
 
 Configuration via environment variables:
     BEDROCK_MODEL_ID_VISION  - Model for image analysis (default: qwen.qwen3-vl-235b-a22b)
-    BEDROCK_MODEL_ID_TEXT    - Model for text-only tasks (default: qwen.qwen3-32b-v1:0)
+    BEDROCK_MODEL_ID_TEXT    - Model for text-only tasks (default: openai.gpt-oss-120b-1:0)
     BEDROCK_MAX_TOKENS       - Max output tokens (default: 1000)
     BEDROCK_TEMPERATURE      - Sampling temperature (default: 0.2)
 """
@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Defaults
 DEFAULT_VISION_MODEL = "qwen.qwen3-vl-235b-a22b"
-DEFAULT_TEXT_MODEL = "qwen.qwen3-32b-v1:0"
+DEFAULT_TEXT_MODEL = "openai.gpt-oss-120b-1:0"
 DEFAULT_MAX_TOKENS = 1000
 DEFAULT_TEMPERATURE = 0.2
 

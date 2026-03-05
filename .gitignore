@@ -25,3 +25,7 @@ PDF_accessability_UI
 
 # PDF UI (separate repo)
 PDF_accessability_UI/
+
+# Frontend build artifacts
+pdf_ui/node_modules/
+pdf_ui/build/

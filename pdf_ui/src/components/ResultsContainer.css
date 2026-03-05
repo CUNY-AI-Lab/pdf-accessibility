@@ -1,0 +1,541 @@
+.results-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background-color: #f4f6f8;
+  margin-top: 40px;
+}
+
+.results-content {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  border: 1px dashed #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center;
+}
+
+.results-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.results-content h2 {
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 32px;
+  color: #020617;
+  margin: 0;
+  text-align: center;
+}
+
+.flow-indicator {
+  font-family: 'Geist', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  line-height: 16px;
+  color: #0033A1;
+  background-color: #fef2f2;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #fecaca;
+  align-self: center;
+}
+
+.processing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-items: center;
+}
+
+.processing-time {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Geist', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  color: #020617;
+}
+
+.description {
+  font-family: 'Geist', sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 20px;
+  color: #475569;
+  text-align: center;
+  margin: 0;
+  width: 100%;
+}
+
+.file-success-container {
+  display: flex;
+  justify-content: center;
+  margin: 24px 0;
+}
+
+.file-info-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.file-name-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.file-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #0033A1;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.file-icon img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) invert(1);
+}
+
+.file-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-name {
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 24px;
+  color: #1e293b;
+  margin-bottom: 4px;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.file-status {
+  font-family: 'Geist', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  color: #059669;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.file-status::before {
+  content: '✓';
+  font-size: 16px;
+  color: #059669;
+}
+
+/* Legacy file-info class for backward compatibility */
+.file-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  background-color: #f8fafc;
+  border-radius: 8px;
+  font-family: 'Geist', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
+  color: #475569;
+}
+
+.button-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
+}
+
+.view-report-btn {
+  background-color: #ffffff;
+  border: 2px solid #0033A1;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 20px;
+  color: #0033A1;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: 300px;
+}
+
+.view-report-btn:hover:not(:disabled) {
+  background-color: #f0f4ff;
+  border-color: #002080;
+  color: #002080;
+}
+
+.download-btn {
+  background-color: #0033A1;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 20px;
+  color: #ffffff;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+  max-width: 300px;
+}
+
+.download-btn:hover:not(:disabled) {
+  background-color: #002080;
+}
+
+.download-btn:disabled,
+.view-report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Custom Confirmation Dialog Styles */
+.confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.confirm-dialog {
+  background: white;
+  border-radius: 16px;
+  padding: 0;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: slideIn 0.3s ease-out;
+  overflow: hidden;
+}
+
+.confirm-header {
+  background-color: #0033A1;
+  color: white;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.confirm-header h3 {
+  margin: 0;
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 28px;
+}
+
+.confirm-body {
+  padding: 24px;
+  text-align: center;
+}
+
+.confirm-body p {
+  margin: 0 0 12px 0;
+  font-family: 'Geist', sans-serif;
+  font-weight: 400;
+  font-size: 16px;
+  line-height: 24px;
+  color: #374151;
+}
+
+.confirm-warning {
+  font-weight: 500 !important;
+  color: #dc2626 !important;
+  font-size: 14px !important;
+  margin: 0 !important;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 12px;
+  padding: 20px 24px;
+  background-color: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+}
+
+.confirm-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn {
+  background-color: #f3f4f6;
+  color: #6b7280;
+  border: 1px solid #d1d5db;
+}
+
+.cancel-btn:hover {
+  background-color: #e5e7eb;
+  transform: translateY(-1px);
+}
+
+.confirm-btn-primary {
+  background-color: #0033A1;
+  color: white;
+}
+
+.confirm-btn-primary:hover {
+  background-color: #002080;
+  transform: translateY(-1px);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 768px) {
+  .results-container {
+    padding: 12px;
+    margin-top: 16px;
+  }
+
+  .results-content {
+    padding: 16px;
+    max-width: 100%;
+    margin: 0 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .results-container {
+    padding: 8px;
+    margin-top: 12px;
+  }
+
+  .results-content {
+    padding: 12px;
+    max-width: 100%;
+    margin: 0 4px;
+  }
+}
+
+@media (max-width: 360px) {
+  .results-container {
+    padding: 4px;
+    margin-top: 8px;
+  }
+
+  .results-content {
+    padding: 8px;
+    max-width: 100%;
+    margin: 0 2px;
+  }
+
+  .results-content h2 {
+    font-size: 20px;
+  }
+
+  .button-group {
+    gap: 10px;
+  }
+
+  .download-btn,
+  .view-report-btn {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+
+  .confirm-dialog {
+    width: 95%;
+    margin: 20px;
+  }
+
+  .confirm-actions {
+    flex-direction: column;
+  }
+
+  .confirm-btn {
+    width: 100%;
+  }
+
+  .file-success-container {
+    margin: 16px 0;
+  }
+
+  .file-info-card {
+    padding: 16px;
+    max-width: 100%;
+  }
+
+  .file-name-section {
+    gap: 12px;
+  }
+
+  .file-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .file-icon img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .file-name {
+    font-size: 14px;
+    line-height: 20px;
+  }
+
+  .file-status {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .file-status::before {
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 640px) {
+  .results-container {
+    padding: 12px;
+    margin-top: 16px;
+  }
+
+  .results-content {
+    padding: 16px;
+    max-width: 100%;
+    margin: 0 5px;
+  }
+
+  .results-content h2 {
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .button-group {
+    gap: 8px;
+  }
+
+  .download-btn,
+  .view-report-btn {
+    padding: 8px 16px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .confirm-dialog {
+    width: 95%;
+    margin: 10px;
+  }
+
+  .confirm-actions {
+    flex-direction: column;
+  }
+
+  .confirm-btn {
+    width: 100%;
+  }
+
+  .file-success-container {
+    margin: 12px 0;
+  }
+
+  .file-info-card {
+    padding: 12px;
+    max-width: 100%;
+  }
+
+  .file-name-section {
+    gap: 10px;
+  }
+
+  .file-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .file-icon img {
+    width: 16px;
+    height: 16px;
+  }
+
+  .file-name {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .file-status {
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  .file-status::before {
+    font-size: 12px;
+  }
+
+  .description {
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .processing-time {
+    font-size: 13px;
+  }
+}

@@ -1,0 +1,116 @@
+/* src/App.css */
+
+body {
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  background-color: #ccc;
+  padding: 20px;
+  text-align: center;
+}
+
+div {
+  margin: 20px;
+}
+
+
+
+/* General button styling */
+button {
+  background-color: #4CAF50; /* Green color for a professional look */
+  color: white; /* Text color */
+  border: none; /* Remove borders */
+  padding: 10px 20px; /* Add padding */
+  text-align: center; /* Center-align text */
+  text-decoration: none; /* Remove underline */
+  display: inline-block; /* Inline-block for proper spacing */
+  font-size: 16px; /* Font size */
+  margin: 5px 2px; /* Margin for spacing */
+  cursor: pointer; /* Pointer cursor */
+  border-radius: 8px; /* Rounded corners */
+  transition: all 0.3s ease-in-out; /* Smooth hover effect */
+}
+
+/* Hover effect */
+button:hover {
+  background-color: #45a049; /* Slightly darker green */
+  transform: scale(1.05); /* Zoom effect on hover */
+}
+
+/* Styling for the upload section */
+.upload-section {
+  margin: 20px 0;
+  text-align: center; /* Center everything */
+  border: 2px dashed #ddd; /* Dashed border for a clean look */
+  border-radius: 12px; /* Rounded edges */
+  padding: 20px; /* Padding inside the section */
+  background-color: #f9f9f9; /* Light background */
+}
+
+.upload-section input[type="file"] {
+  margin-top: 10px; /* Add some margin to the input */
+}
+
+.upload-section button {
+  margin-top: 10px;
+}
+
+/* Styling for the download section */
+.download-section {
+  margin: 20px 0;
+  text-align: center; /* Center everything */
+  border: 2px solid #ddd; /* Solid border for separation */
+  border-radius: 12px; /* Rounded edges */
+  padding: 20px; /* Padding inside the section */
+  background-color: #ffffff; /* Clean white background */
+}
+
+.download-section button {
+  margin-top: 15px;
+}
+
+/* Additional note styling */
+.note {
+  font-size: 14px;
+  color: #555; /* Subtle gray */
+  margin: 10px 0;
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 600px) {
+  body {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+  }
+  
+  /* Ensure touch targets are at least 44px */
+  button, input, select, textarea {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Improve readability on mobile */
+  .upload-section, .download-section {
+    margin: 10px 0;
+    padding: 15px;
+  }
+  
+  /* Better spacing for mobile */
+  .note {
+    font-size: 12px;
+    margin: 8px 0;
+  }
+}
+
+/* Prevent horizontal scrolling on mobile */
+@media (max-width: 768px) {
+  body {
+    overflow-x: hidden;
+  }
+  
+  * {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+}

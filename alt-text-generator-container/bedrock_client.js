@@ -16,7 +16,7 @@ const { STSClient, GetCallerIdentityCommand } = require('@aws-sdk/client-sts');
 const sharp = require('sharp');
 
 const DEFAULT_VISION_MODEL = 'qwen.qwen3-vl-235b-a22b';
-const DEFAULT_TEXT_MODEL = 'qwen.qwen3-32b-v1:0';
+const DEFAULT_TEXT_MODEL = 'openai.gpt-oss-120b-1:0';
 const DEFAULT_MAX_TOKENS = 1000;
 const DEFAULT_TEMPERATURE = 0.2;
 

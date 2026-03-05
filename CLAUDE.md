@@ -21,7 +21,7 @@ pip install -r requirements.txt
 cdk synth
 cdk deploy PDFAccessibility \
   -c bedrock_vision_model=qwen.qwen3-vl-235b-a22b \
-  -c bedrock_text_model=qwen.qwen3-32b-v1:0
+  -c bedrock_text_model=openai.gpt-oss-120b-1:0
 ```
 
 ### Frontend (React)
@@ -73,7 +73,7 @@ Pre-Check (Lambda) runs in parallel with Map
 
 ### Model Abstraction
 
-All Bedrock calls use the **Converse API** (not InvokeModel) for model-agnostic support. Configured via env vars `BEDROCK_MODEL_ID_VISION` and `BEDROCK_MODEL_ID_TEXT`. Defaults to Qwen3 VL 235B (vision) and Qwen3 32B (text). Cross-region inference profile IDs (e.g. `us.qwen.*`) are resolved to full ARNs at runtime using STS.
+All Bedrock calls use the **Converse API** (not InvokeModel) for model-agnostic support. Configured via env vars `BEDROCK_MODEL_ID_VISION` and `BEDROCK_MODEL_ID_TEXT`. Defaults to Qwen3 VL 235B (vision) and GPT-OSS 120B (text). Cross-region inference profile IDs (e.g. `us.qwen.*`) are resolved to full ARNs at runtime using STS.
 
 ### Accessibility Checker
 
@@ -103,6 +103,12 @@ All Bedrock calls use the **Converse API** (not InvokeModel) for model-agnostic 
 ### Frontend Deployment
 - Amplify manual deploy: zip must contain files at root, not inside a `build/` subdirectory
 - `cd build && zip -r ../deploy.zip .`
+- `REACT_APP_AUTHORITY` must NOT include `https://` — `App.js` prepends it automatically. Use bare domain: `cognito-idp.us-east-1.amazonaws.com/<pool-id>`
+
+### Frontend Design
+- Palette matches CUNY AI Lab website (ailab.gc.cuny.edu): navy `#1D3A83`, vibrant blue `#3B73E6`, teal `#2FB8D6`, cream `#FAFCF8`
+- Fonts: Outfit (headings) + Inter (body) — loaded via Google Fonts in `public/index.html`
+- Theme defined in `src/theme.jsx`, color constants in `src/utilities/constants.jsx`
 
 ## Infrastructure Notes
 

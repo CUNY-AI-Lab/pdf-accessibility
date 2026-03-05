@@ -26,7 +26,7 @@ class PDFAccessibility(Stack):
 
         # Model configuration from CDK context (with defaults)
         bedrock_vision_model = self.node.try_get_context("bedrock_vision_model") or "qwen.qwen3-vl-235b-a22b"
-        bedrock_text_model = self.node.try_get_context("bedrock_text_model") or "qwen.qwen3-32b-v1:0"
+        bedrock_text_model = self.node.try_get_context("bedrock_text_model") or "openai.gpt-oss-120b-1:0"
 
         # S3 Bucket
         pdf_processing_bucket = s3.Bucket(self, "pdfaccessibilitybucket1",
