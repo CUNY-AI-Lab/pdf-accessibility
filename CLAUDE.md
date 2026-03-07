@@ -191,5 +191,6 @@ The merger (`lambda/pdf-merger-lambda-python/merger.py`) preserves accessibility
 - Step Functions Map concurrency: 15 (configurable, reduced for Bedrock rate limiting)
 - CloudWatch dashboard defined in `app.py` with `$filename` pattern variable for filtering
 - Cognito user pool with custom attributes for per-user quotas (`custom:max_files_allowed`, etc.) — see `docs/CONFIGURING_LIMITS.md`
+- A `LambdaNodejsUpgradeAspect` CDK Aspect in `app.py` auto-upgrades any CDK-generated Node.js 20.x Lambdas to 22.x (future-proofing for runtime deprecations)
 - No CI/CD pipeline — deployment is manual via `./deploy.sh` (CodeBuild) or direct `cdk deploy`
 - No test suite — only a stub React test exists at `pdf_ui/src/App.test.js`

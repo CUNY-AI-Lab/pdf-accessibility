@@ -368,6 +368,17 @@ class PDFAccessibility(Stack):
             ),
         )
 
+import jsii
+
+@jsii.implements(cdk.IAspect)
+class LambdaNodejsUpgradeAspect:
+    """Upgrade any auto-generated CDK Lambdas from Node.js 20.x to 22.x."""
+    def visit(self, node):
+        if isinstance(node, lambda_.CfnFunction):
+            if node.runtime and node.runtime == "nodejs20.x":
+                node.runtime = "nodejs22.x"
+
 app = cdk.App()
-PDFAccessibility(app, "PDFAccessibility")
+stack = PDFAccessibility(app, "PDFAccessibility")
+cdk.Aspects.of(stack).add(LambdaNodejsUpgradeAspect())
 app.synth()
