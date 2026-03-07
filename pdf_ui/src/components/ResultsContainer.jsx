@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { S3Client, GetObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import './ResultsContainer.css';
 import img1 from "../assets/zap.svg";
 import AccessibilityChecker from './AccessibilityChecker';
+import { PDFBucket, region } from '../utilities/constants';
 
 const ResultsContainer = ({
   fileName,
@@ -15,8 +18,48 @@ const ResultsContainer = ({
   onNewUpload
 }) => {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingReport, setIsDownloadingReport] = useState(false);
   const [showReportDialog, setShowReportDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  const s3 = useMemo(() => {
+    if (!awsCredentials?.accessKeyId) return null;
+    return new S3Client({
+      region,
+      credentials: {
+        accessKeyId: awsCredentials.accessKeyId,
+        secretAccessKey: awsCredentials.secretAccessKey,
+        sessionToken: awsCredentials.sessionToken,
+      },
+    });
+  }, [awsCredentials]);
+
+  const handleDownloadReport = useCallback(async () => {
+    if (!s3 || !updatedFilename) return;
+    setIsDownloadingReport(true);
+
+    try {
+      const baseKey = updatedFilename.replace(/\.pdf$/i, '');
+      const origBase = (originalFileName || fileName || '').replace(/\.pdf$/i, '');
+      const afterKey = `temp/${baseKey}/accessability-report/COMPLIANT_${baseKey}_accessibility_report_after_remidiation.json`;
+      const afterFilename = `COMPLIANT_${origBase}_after_remediation_accessibility_report.json`;
+
+      // Check if after-report exists
+      await s3.send(new HeadObjectCommand({ Bucket: PDFBucket, Key: afterKey }));
+      const url = await getSignedUrl(s3, new GetObjectCommand({
+        Bucket: PDFBucket,
+        Key: afterKey,
+        ResponseContentDisposition: `attachment; filename="${afterFilename}"`,
+      }), { expiresIn: 30000 });
+
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Report download failed:', error);
+      alert('Report not available yet. Try viewing the report first, then download from the report dialog.');
+    } finally {
+      setIsDownloadingReport(false);
+    }
+  }, [s3, updatedFilename, originalFileName, fileName]);
 
   // Function to format processing time
   const formatProcessingTime = (seconds) => {
@@ -134,9 +177,19 @@ const ResultsContainer = ({
 
           <div className="button-group">
             {format === 'pdf' && (
-              <button className="view-report-btn" onClick={() => setShowReportDialog(true)}>
-                View Report
-              </button>
+              <div className="report-button-row">
+                <button className="view-report-btn" onClick={() => setShowReportDialog(true)}>
+                  View Report
+                </button>
+                <button
+                  className="download-report-btn"
+                  onClick={handleDownloadReport}
+                  disabled={isDownloadingReport}
+                  title="Download the accessibility report as JSON"
+                >
+                  {isDownloadingReport ? 'Downloading...' : 'Download Report'}
+                </button>
+              </div>
             )}
             <button
               className="download-btn"

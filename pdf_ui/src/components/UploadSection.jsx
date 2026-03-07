@@ -57,6 +57,32 @@ function UploadSection({ onUploadComplete, awsCredentials, currentUsage, maxFile
   const [errorMessage, setErrorMessage] = useState('');
   const [openSnackbar, setOpenSnackbar] = useState(false);
   const [formatAvailability, setFormatAvailability] = useState({ pdf: false, html: false });
+  const [isDragOver, setIsDragOver] = useState(false);
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      // Simulate a file input event
+      const syntheticEvent = { target: { files } };
+      handleFileInput(syntheticEvent);
+    }
+  };
 
   // Check format availability on component mount
   React.useEffect(() => {
@@ -368,7 +394,7 @@ function UploadSection({ onUploadComplete, awsCredentials, currentUsage, maxFile
             </div>
 
             <div className="disclaimer">
-              <p>This solution does not remediate for fillable forms and color selection/ contrast for people with color blindness</p>
+              <p>This solution does not currently remediate fillable forms</p>
             </div>
           </div>
 
@@ -394,7 +420,12 @@ function UploadSection({ onUploadComplete, awsCredentials, currentUsage, maxFile
         transition={{ duration: 0.5 }}
       >
         <div className="upload-container-selected">
-          <div className="upload-content">
+          <div
+            className={`upload-content${isDragOver ? ' drag-over' : ''}`}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <div className="upload-header">
               <div className="file-icon">
                 <img src={formatIcon} alt="" />
@@ -426,7 +457,7 @@ function UploadSection({ onUploadComplete, awsCredentials, currentUsage, maxFile
           </div>
 
           <div className="disclaimer">
-            <p>This solution does not remediate for fillable forms and color selection/ contrast for people with color blindness</p>
+            <p>This solution does not currently remediate fillable forms</p>
           </div>
         </div>
 

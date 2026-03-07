@@ -175,6 +175,45 @@
   align-items: center;
 }
 
+.report-button-row {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  max-width: 300px;
+}
+
+.report-button-row .view-report-btn,
+.report-button-row .download-report-btn {
+  flex: 1;
+  max-width: none;
+}
+
+.download-report-btn {
+  background-color: transparent;
+  border: 2px solid #475569;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-family: 'Geist', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  color: #475569;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.download-report-btn:hover:not(:disabled) {
+  background-color: #f8fafc;
+  border-color: #1e293b;
+  color: #1e293b;
+}
+
+.download-report-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .view-report-btn {
   background-color: #ffffff;
   border: 2px solid #0033A1;
@@ -396,9 +435,15 @@
   }
 
   .download-btn,
-  .view-report-btn {
+  .view-report-btn,
+  .download-report-btn {
     padding: 10px 20px;
     font-size: 14px;
+  }
+
+  .report-button-row {
+    flex-direction: column;
+    max-width: 100%;
   }
 
   .confirm-dialog {
@@ -474,10 +519,16 @@
   }
 
   .download-btn,
-  .view-report-btn {
+  .view-report-btn,
+  .download-report-btn {
     padding: 8px 16px;
     font-size: 13px;
     min-height: 44px;
+  }
+
+  .report-button-row {
+    flex-direction: column;
+    max-width: 100%;
   }
 
   .confirm-dialog {

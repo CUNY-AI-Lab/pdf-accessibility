@@ -78,6 +78,13 @@
   justify-content: flex-start;
   width: 100%;
   box-sizing: border-box;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.upload-container-selected .upload-content.drag-over {
+  border-color: #3B73E6;
+  background-color: #f0f4ff;
+  border-style: solid;
 }
 
 @media (max-width: 768px) {

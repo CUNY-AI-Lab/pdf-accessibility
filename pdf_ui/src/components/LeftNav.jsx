@@ -5,7 +5,7 @@ import SupportIcon from '@mui/icons-material/Support';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-const LeftNav = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpen }) => {
+const LeftNav = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpen, maxFilesAllowed = 100, maxPagesAllowed = 50, maxSizeAllowedMB = 500 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
@@ -107,26 +107,26 @@ const LeftNav = ({ isCollapsed, setIsCollapsed, mobileOpen, setMobileOpen }) => 
               Limits
             </Typography>
             <Typography variant="body2" gutterBottom>
-              - Up to <strong>100</strong> documents per account
+              - Up to <strong>{maxFilesAllowed}</strong> documents per account
             </Typography>
             <Typography variant="body2" gutterBottom>
-              - Max <strong>50 pages</strong> per document
+              - Max <strong>{maxPagesAllowed} pages</strong> per document
             </Typography>
             <Typography variant="body2" gutterBottom>
-              - Max <strong>500 MB</strong> per file
+              - Max <strong>{maxSizeAllowedMB} MB</strong> per file
             </Typography>
             <Divider sx={{ marginY: 2 }} />
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Please note
+              Privacy & Data
+            </Typography>
+            <Typography variant="body2" gutterBottom>
+              - <strong>Zero retention</strong> — uploaded files are processed and then deleted. No data is stored after remediation.
             </Typography>
             <Typography variant="body2" gutterBottom>
               - Only <strong>PDF files</strong> are accepted.
             </Typography>
             <Typography variant="body2" gutterBottom>
-              - Do not upload documents containing <strong>sensitive information</strong>.
-            </Typography>
-            <Typography variant="body2" gutterBottom>
-              - Fillable forms and color contrast are not currently remediated.
+              - Fillable forms are not currently remediated.
             </Typography>
           </CardContent>
         </Card>

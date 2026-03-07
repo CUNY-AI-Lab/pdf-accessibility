@@ -85,89 +85,59 @@
   width: 100%;
 }
 
+/* --- Progress bar --- */
+
 .progress-section {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  align-items: center;
+  gap: 10px;
   width: 100%;
 }
 
-.progress-bar {
+.progress-percentage {
+  font-family: 'Outfit', 'Geist', sans-serif;
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1;
+  color: #1D3A83;
+  letter-spacing: -0.5px;
+}
+
+.progress-bar-track {
   width: 100%;
-  height: 4px;
-  background-color: #f1f5f9;
+  height: 8px;
+  background-color: #e2e8f0;
   border-radius: 100px;
   overflow: hidden;
+  position: relative;
 }
 
-.progress-fill {
+.progress-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
-  background-color: #0033A1;
   border-radius: 100px;
-  transition: width 0.3s ease;
+  background: linear-gradient(90deg, #1D3A83, #3B73E6, #2FB8D6);
+  transition: width 1s ease-out;
 }
 
-.steps-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: 100%;
-}
-
-.step-item {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.step-number {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: 'Geist', sans-serif;
-  font-weight: 600;
-  font-size: 16px;
-  line-height: 16px;
-  background-color: #f8fafc;
+.progress-stage-label {
+  font-family: 'Outfit', 'Geist', sans-serif;
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 20px;
   color: #475569;
-  border: 1px solid #f1f5f9;
-  flex-shrink: 0;
+  text-align: center;
 }
 
-.step-number.active {
-  background-color: #0033A1;
-  color: white;
-  border: none;
-  transform: scale(1.1);
-  transition: all 0.3s ease;
-}
-
-
-.step-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.step-title {
-  font-family: 'Geist', sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 20px;
-  color: #020617;
-}
-
-.step-description {
-  font-family: 'Geist', sans-serif;
+.progress-chunk-info {
+  color: #94a3b8;
   font-weight: 400;
-  font-size: 14px;
-  line-height: 20px;
-  color: #1e293b;
 }
+
+/* --- Misc --- */
 
 .processing-error {
   background-color: #fef2f2;
@@ -315,147 +285,43 @@
 }
 
 @keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-20px) scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
+  from { opacity: 0; transform: translateY(-20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 @media (max-width: 768px) {
-  .processing-container {
-    padding: 12px;
-    margin-top: 0px;
-  }
-
-  .processing-content {
-    padding: 16px;
-    max-width: 100%;
-    margin: 0 8px;
-  }
-}
-
-@media (max-width: 480px) {
-  .processing-container {
-    padding: 8px;
-    margin-top: 0px;
-  }
-
-  .processing-content {
-    padding: 12px;
-    max-width: 100%;
-    margin: 0 4px;
-  }
-}
-
-@media (max-width: 360px) {
-  .processing-container {
-    padding: 4px;
-    margin-top: 0px;
-  }
-
-  .processing-content {
-    padding: 8px;
-    max-width: 100%;
-    margin: 0 2px;
-  }
-
-  .processing-header h2 {
-    font-size: 16px;
-  }
-
-  .step-item {
-    gap: 12px;
-  }
-
-  .step-number {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
-  }
-
-  .confirm-dialog {
-    width: 95%;
-    margin: 20px;
-  }
-
-  .confirm-actions {
-    flex-direction: column;
-  }
-
-  .confirm-btn {
-    width: 100%;
-  }
+  .processing-container { padding: 12px; }
+  .processing-content { padding: 16px; max-width: 100%; margin: 0 8px; }
 }
 
 @media (max-width: 640px) {
-  .processing-container {
-    padding: 12px;
-    margin-top: 0px;
-  }
+  .processing-container { padding: 12px; }
+  .processing-content { padding: 16px; max-width: 100%; margin: 0 5px; }
+  .processing-header h2 { font-size: 14px; line-height: 20px; }
+  .processing-description { font-size: 13px; }
+  .time-info { font-size: 13px; }
+  .progress-stage-label { font-size: 13px; }
+  .progress-percentage { font-size: 22px; }
+  .confirm-dialog { width: 95%; margin: 10px; }
+  .confirm-actions { flex-direction: column; }
+  .confirm-btn { width: 100%; }
+}
 
-  .processing-content {
-    padding: 16px;
-    max-width: 100%;
-    margin: 0 5px;
-  }
+@media (max-width: 480px) {
+  .processing-container { padding: 8px; }
+  .processing-content { padding: 12px; max-width: 100%; margin: 0 4px; }
+}
 
-  .processing-header h2 {
-    font-size: 14px;
-    line-height: 20px;
-  }
-
-  .step-item {
-    gap: 10px;
-  }
-
-  .step-number {
-    width: 24px;
-    height: 24px;
-    font-size: 12px;
-  }
-
-  .step-title {
-    font-size: 13px;
-    line-height: 18px;
-  }
-
-  .step-description {
-    font-size: 12px;
-    line-height: 16px;
-  }
-
-  .processing-description {
-    font-size: 13px;
-    line-height: 18px;
-  }
-
-  .time-info {
-    font-size: 13px;
-  }
-
-  .confirm-dialog {
-    width: 95%;
-    margin: 10px;
-  }
-
-  .confirm-actions {
-    flex-direction: column;
-  }
-
-  .confirm-btn {
-    width: 100%;
-  }
+@media (max-width: 360px) {
+  .processing-container { padding: 4px; }
+  .processing-content { padding: 8px; max-width: 100%; margin: 0 2px; }
+  .processing-header h2 { font-size: 16px; }
+  .confirm-dialog { width: 95%; margin: 20px; }
+  .confirm-actions { flex-direction: column; }
+  .confirm-btn { width: 100%; }
 }
