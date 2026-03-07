@@ -155,7 +155,7 @@ def generate_title(extracted_text, current_title):
     )['Account']
 
     # Use configurable model ID from environment variable
-    model_name = os.environ.get('BEDROCK_MODEL_ID_VISION', 'qwen.qwen3-vl-235b-a22b')
+    model_name = os.environ.get('BEDROCK_MODEL_ID_TEXT', 'openai.gpt-oss-120b-1:0')
     # Construct the model_id (resolve inference profile ARN for region-prefixed IDs)
     if model_name.startswith(('us.', 'eu.', 'ap.')):
         model_id = f'arn:aws:bedrock:{region}:{account_id}:inference-profile/{model_name}'
@@ -197,7 +197,20 @@ def generate_title(extracted_text, current_title):
     )
 
     # Extract and return the generated title
-    generated_title = response['output']['message']['content'][0]['text']
+    content_blocks = response['output']['message']['content']
+    print(f"(generate_title) Response content blocks: {content_blocks}")
+    # Find the first text block — some models wrap content differently
+    generated_title = None
+    for block in content_blocks:
+        if isinstance(block, dict) and 'text' in block:
+            generated_title = block['text']
+            break
+        elif isinstance(block, str):
+            generated_title = block
+            break
+    if generated_title is None:
+        # Fallback: try to extract text from any block
+        generated_title = str(content_blocks[0])
     return generated_title.strip('"')
 
 

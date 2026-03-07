@@ -90,7 +90,7 @@ def check_accessibility(pdf_path):
     _check_role_map(pdf, report)
     _check_font_embedding(pdf, report)
     _check_unicode_mapping(pdf, report)
-    _check_artifact_marking(pdf, report)
+    _check_artifact_marking(pdf, pdf_path, report)
 
     # Page-level checks
     _check_tabs(pdf, report)
@@ -153,6 +153,7 @@ def _convert_to_ui_format(report):
         "table_header_scope": ("Tables", "Table Header Scope"),
         "list_structure": ("Lists", "List Structure"),
         "link_alt_text": ("Links", "Link Alternate Text"),
+        "link_meaningful_text": ("Links", "Meaningful Link Text"),
         "form_field_labels": ("Forms", "Form Field Labels"),
         "color_contrast": ("Visual", "Color Contrast"),
         "document_open": ("Document", "Document Open"),
@@ -304,8 +305,15 @@ def _check_outlines(pdf, report):
         report["checks"].append(_pass("outlines", f"Document has {num_pages} pages (<=20), outlines not required", "2.4.5"))
         return
 
-    if pikepdf.Name.Outlines in pdf.Root:
-        report["checks"].append(_pass("outlines", "/Outlines (bookmarks) exist", "2.4.5"))
+    outlines = pdf.Root.get(pikepdf.Name.Outlines)
+    if outlines:
+        # Verify the outline tree actually has entries (Count > 0 or First child exists)
+        count = outlines.get(pikepdf.Name("/Count"))
+        first = outlines.get(pikepdf.Name("/First"))
+        if first or (count is not None and int(count) != 0):
+            report["checks"].append(_pass("outlines", "/Outlines (bookmarks) exist", "2.4.5"))
+        else:
+            report["checks"].append(_fail("outlines", f"Document has {num_pages} pages and /Outlines exists but is empty (no bookmarks)", "2.4.5"))
     else:
         report["checks"].append(_fail("outlines", f"Document has {num_pages} pages but no /Outlines (bookmarks)", "2.4.5"))
 
@@ -361,19 +369,21 @@ def _check_heading_nesting(struct_tree, report):
         report["checks"].append(_warn("heading_nesting", "No headings found in structure tree", "1.3.1"))
         return
 
-    # Check for skipped levels
-    skipped = False
+    # Check for skipped levels — collect all violations
+    skips = []
     for i in range(1, len(heading_levels)):
         if heading_levels[i] > heading_levels[i - 1] + 1:
-            report["checks"].append(_fail(
-                "heading_nesting",
-                f"Heading level skipped: H{heading_levels[i-1]} -> H{heading_levels[i]}",
-                "1.3.1"
-            ))
-            skipped = True
-            break
+            skips.append(f"H{heading_levels[i-1]} -> H{heading_levels[i]}")
 
-    if not skipped:
+    if skips:
+        skips_str = ", ".join(skips[:5])
+        suffix = f" and {len(skips) - 5} more" if len(skips) > 5 else ""
+        report["checks"].append(_fail(
+            "heading_nesting",
+            f"Heading level(s) skipped: {skips_str}{suffix}",
+            "1.3.1"
+        ))
+    else:
         report["checks"].append(_pass("heading_nesting", "Heading levels properly nested", "1.3.1"))
 
 
@@ -445,7 +455,7 @@ def _check_tables(struct_tree, report):
         report["checks"].append(_pass("table_headers", "All Table elements contain /TH cells", "1.3.1"))
 
     if th_without_scope > 0:
-        report["checks"].append(_warn(
+        report["checks"].append(_fail(
             "table_header_scope",
             f"{th_without_scope} /TH cells missing /Scope attribute",
             "1.3.1"
@@ -462,20 +472,31 @@ def _check_lists(struct_tree, report):
         report["checks"].append(_pass("list_structure", "No List elements found", "1.3.1"))
         return
 
-    malformed = 0
+    lists_no_li = 0
+    li_missing_lbody = 0
+    total_li = 0
     for lst in lists:
         lis = _collect_struct_elements(lst, "LI")
         if not lis:
-            malformed += 1
+            lists_no_li += 1
+            continue
+        for li in lis:
+            total_li += 1
+            # Check LI has LBody child (Lbl is optional but LBody is required)
+            lbody = _collect_struct_elements(li, "LBody")
+            if not lbody:
+                li_missing_lbody += 1
 
-    if malformed == 0:
-        report["checks"].append(_pass("list_structure", f"All {len(lists)} List elements properly structured", "1.3.1"))
+    issues = []
+    if lists_no_li > 0:
+        issues.append(f"{lists_no_li} of {len(lists)} List elements missing /LI children")
+    if li_missing_lbody > 0:
+        issues.append(f"{li_missing_lbody} of {total_li} /LI elements missing /LBody child")
+
+    if issues:
+        report["checks"].append(_fail("list_structure", "; ".join(issues), "1.3.1"))
     else:
-        report["checks"].append(_fail(
-            "list_structure",
-            f"{malformed} of {len(lists)} List elements missing /LI children",
-            "1.3.1"
-        ))
+        report["checks"].append(_pass("list_structure", f"All {len(lists)} List elements properly structured (L -> LI -> LBody)", "1.3.1"))
 
 
 # --- Link checks ---
@@ -529,7 +550,7 @@ def _check_links(pdf, report):
 
     if generic_text_count > 0:
         report["checks"].append(_warn(
-            "link_alt_text",
+            "link_meaningful_text",
             f"{generic_text_count} Link annotations have generic text (e.g. 'click here', bare URLs) — use descriptive link text",
             "2.4.4"
         ))
@@ -557,9 +578,9 @@ def _check_form_fields(pdf, report):
                     continue
 
             subtype = annot.get(pikepdf.Name.Subtype)
-            if subtype == pikepdf.Name("/Widget"):
+            if subtype == pikepdf.Name.Widget:
                 total_widgets += 1
-                tu = annot.get(pikepdf.Name("/TU"))
+                tu = annot.get(pikepdf.Name.TU)
                 if not tu or str(tu).strip() == "":
                     missing_tu += 1
 
@@ -687,9 +708,9 @@ def _check_color_contrast(pdf, pdf_path, report):
             page = doc[page_num]
             page_rect = page.rect
 
-            # Render page at low res for background sampling
+            # Render page for background sampling (150 DPI for accuracy with small text)
             try:
-                pixmap = page.get_pixmap(dpi=72)
+                pixmap = page.get_pixmap(dpi=150)
             except Exception:
                 continue
 
@@ -896,32 +917,57 @@ def _check_unicode_mapping(pdf, report):
         ))
 
 
-def _check_artifact_marking(pdf, report):
-    """Heuristic: if doc > 3 pages and no Artifact struct elements, warn."""
+def _check_artifact_marking(pdf, pdf_path, report):
+    """Check content streams for /Artifact BMC markers (not structure tree)."""
     num_pages = len(pdf.pages)
     if num_pages <= 3:
         report["checks"].append(_pass("artifact_marking", f"Document has {num_pages} pages (<=3), artifact check not applicable", "1.3.1"))
         return
 
-    struct_tree = pdf.Root.get(pikepdf.Name.StructTreeRoot)
-    if not struct_tree:
-        report["checks"].append(_warn("artifact_marking", "No structure tree — cannot verify artifact marking", "1.3.1"))
-        return
-
-    all_elements = _collect_struct_elements(struct_tree)
+    # Artifacts are marked in content streams with /Artifact BMC or /Artifact BDC,
+    # NOT as structure tree elements. Check via PyMuPDF's text extraction which
+    # distinguishes artifact content from real content.
     has_artifact = False
-    for elem in all_elements:
-        s = elem.get(pikepdf.Name.S)
-        if s is not None and str(s) == "/Artifact":
-            has_artifact = True
-            break
+    try:
+        doc = pymupdf.open(pdf_path)
+        for page_num in range(min(len(doc), 10)):  # sample first 10 pages
+            page = doc[page_num]
+            # PyMuPDF's rawdict includes artifact info; alternatively check raw content stream
+            raw = page.read_contents()
+            if raw and b"/Artifact" in raw:
+                has_artifact = True
+                break
+        doc.close()
+    except Exception:
+        # Fallback: check raw page content streams via pikepdf
+        try:
+            for i, page in enumerate(pdf.pages):
+                if i >= 10:
+                    break
+                contents = page.get(pikepdf.Name.Contents)
+                if contents is None:
+                    continue
+                if isinstance(contents, pikepdf.Array):
+                    for stream in contents:
+                        data = stream.read_bytes()
+                        if b"/Artifact" in data:
+                            has_artifact = True
+                            break
+                else:
+                    data = contents.read_bytes()
+                    if b"/Artifact" in data:
+                        has_artifact = True
+                if has_artifact:
+                    break
+        except Exception:
+            pass
 
     if has_artifact:
-        report["checks"].append(_pass("artifact_marking", "Artifact-tagged elements found in structure tree", "1.3.1"))
+        report["checks"].append(_pass("artifact_marking", "Artifact markers found in content streams (headers/footers/decorative content properly marked)", "1.3.1"))
     else:
         report["checks"].append(_warn(
             "artifact_marking",
-            f"Document has {num_pages} pages but no Artifact-tagged elements — decorative content (headers, footers, watermarks) should be marked as artifacts",
+            f"Document has {num_pages} pages but no /Artifact markers found in content streams — decorative content (headers, footers, watermarks) should be marked as artifacts",
             "1.3.1"
         ))
 
@@ -1069,7 +1115,7 @@ def _check_other_annotations(pdf, report):
         for annot in annots:
             try:
                 subtype = annot.get(pikepdf.Name.Subtype)
-                if subtype in (pikepdf.Name.Link, pikepdf.Name("/Widget")):
+                if subtype in (pikepdf.Name.Link, pikepdf.Name.Widget):
                     continue
                 total_other += 1
                 contents = annot.get(pikepdf.Name.Contents)

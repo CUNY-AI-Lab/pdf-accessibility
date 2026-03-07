@@ -66,7 +66,7 @@ def lambda_handler(event, context):
         report = check_accessibility(local_path)
         bucket_save_path = save_report_to_s3(s3_bucket, file_basename, report)
         print(f"Filename : {file_basename} | Saved accessibility report to {bucket_save_path}")
-        print(f"Filename : {file_basename} | Summary: {report['summary']}")
+        print(f"Filename : {file_basename} | Summary: {report.get('Summary', report.get('summary', 'N/A'))}")
     except Exception as e:
         print(f'Filename : {file_basename} | Exception encountered: {e}')
         return f"Filename : {file_basename} | Exception encountered: {e}"

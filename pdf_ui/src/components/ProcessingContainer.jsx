@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { S3Client, HeadObjectCommand, GetObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
+import { S3Client, HeadObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import ResultsContainer from './ResultsContainer';
 import './ProcessingContainer.css';
@@ -70,20 +70,6 @@ const ProcessingContainer = ({
     return await getSignedUrl(s3, command, { expiresIn: 30000 });
   }, [getS3Client]);
 
-  // Count S3 objects matching a prefix
-  const countObjects = useCallback(async (s3, prefix) => {
-    try {
-      const res = await s3.send(new ListObjectsV2Command({
-        Bucket: PDFBucket,
-        Prefix: prefix,
-        MaxKeys: 200,
-      }));
-      return res.Contents ? res.Contents.length : 0;
-    } catch {
-      return 0;
-    }
-  }, []);
-
   // Check if a specific S3 key exists
   const objectExists = useCallback(async (s3, bucket, key) => {
     try {
@@ -93,6 +79,23 @@ const ProcessingContainer = ({
       return false;
     }
   }, []);
+
+  // Count how many chunk-numbered objects exist for a given key pattern.
+  // Uses HeadObject (s3:GetObject) since the IAM role lacks s3:ListBucket.
+  // keyFn: function(chunkNum) => S3 key to check
+  const countChunkObjects = useCallback(async (s3, keyFn, maxChunks = 50) => {
+    let count = 0;
+    for (let i = 1; i <= maxChunks; i++) {
+      const exists = await objectExists(s3, PDFBucket, keyFn(i));
+      if (exists) {
+        count++;
+      } else if (i > count + 3) {
+        // Allow up to 3 gaps (in case of non-sequential numbering), then stop
+        break;
+      }
+    }
+    return count;
+  }, [objectExists]);
 
   const truncateFilename = (filename) => {
     const THRESHOLD = 30;
@@ -169,91 +172,123 @@ const ProcessingContainer = ({
       }
 
       // --- PDF-to-PDF: check real pipeline artifacts ---
+      // Uses only HeadObject (s3:GetObject) — no ListBucket permission needed.
+      // Check from end backwards so later stages are always reachable.
 
-      // Stage 1: Check for chunks (splitter output)
-      const chunkCount = await countObjects(s3, `temp/${basename}/${basename}_chunk_`);
+      try {
+        // 1. Check final result FIRST (fast exit)
+        const finalKey = `result/COMPLIANT_${updatedFilename}`;
+        const finalExists = await objectExists(s3, PDFBucket, finalKey);
 
-      if (chunkCount === 0) {
-        // Still splitting or waiting
-        if (!cancelled) {
-          setCurrentStage(1);
-          setProgress(10);
-          setChunkInfo('');
+        if (finalExists) {
+          const desiredFilename = `COMPLIANT_${originalFileName}`;
+          const url = await generatePresignedUrl(PDFBucket, finalKey, desiredFilename);
+          if (!cancelled) {
+            setProgress(100);
+            setCurrentStage(STAGES.length - 1);
+            setChunkInfo('');
+            setDownloadUrl(url);
+            setIsFileReady(true);
+            onFileReady(url);
+            clearInterval(pollInterval);
+            clearInterval(timeInterval);
+          }
+          return;
         }
-        return;
-      }
 
-      // Stage 2: Pre-check report
-      const preReportCount = await countObjects(s3, `temp/${basename}/accessability-report/${basename}_accessibility_report_before`);
+        // 2. Check merged file
+        const mergedExists = await objectExists(s3, PDFBucket, `temp/${basename}/merged_${basename}.pdf`);
 
-      // Stage 3: AI Tagger — count COMPLIANT_*.pdf files in output_autotag
-      const taggedCount = await countObjects(s3, `temp/${basename}/output_autotag/COMPLIANT_`);
-
-      if (taggedCount < chunkCount) {
-        // Still tagging
-        const tagPct = chunkCount > 0 ? Math.floor((taggedCount / chunkCount) * 100) : 0;
-        const stagePct = 15 + Math.floor(tagPct * 0.25); // 15% to 40%
-        if (!cancelled) {
-          setCurrentStage(3);
-          setProgress(Math.max(preReportCount > 0 ? 15 : 12, stagePct));
-          setChunkInfo(chunkCount > 1 ? `${taggedCount} of ${chunkCount} chunks tagged` : '');
+        if (mergedExists) {
+          const postReportExists = await objectExists(s3, PDFBucket,
+            `temp/${basename}/accessability-report/COMPLIANT_${basename}_accessibility_report_after_remidiation.json`);
+          if (!cancelled) {
+            setCurrentStage(postReportExists ? 7 : 6);
+            setProgress(postReportExists ? 95 : 85);
+            setChunkInfo('');
+          }
+          return;
         }
-        return;
-      }
 
-      // Stage 4: Alt-text — count FINAL_*.pdf files
-      const altTextCount = await countObjects(s3, `temp/${basename}/FINAL_`);
+        // 3. Count chunk-level artifacts using HeadObject probing
+        const chunkKey = (n) => `temp/${basename}/${basename}_chunk_${n}.pdf`;
+        const taggedKey = (n) => `temp/${basename}/output_autotag/COMPLIANT_${basename}_chunk_${n}.pdf`;
+        const finalChunkKey = (n) => `temp/${basename}/FINAL_${basename}_chunk_${n}.pdf`;
 
-      if (altTextCount < chunkCount) {
-        const altPct = chunkCount > 0 ? Math.floor((altTextCount / chunkCount) * 100) : 0;
-        const stagePct = 40 + Math.floor(altPct * 0.25); // 40% to 65%
-        if (!cancelled) {
-          setCurrentStage(4);
-          setProgress(stagePct);
-          setChunkInfo(chunkCount > 1 ? `${altTextCount} of ${chunkCount} chunks processed` : '');
+        // First determine how many chunks exist (probe up to 50)
+        const chunkCount = await countChunkObjects(s3, chunkKey);
+
+        if (chunkCount === 0) {
+          // Check if chunk_1 tagged file exists (splitter may have run but we missed it)
+          const tagged1 = await objectExists(s3, PDFBucket, taggedKey(1));
+          const final1 = await objectExists(s3, PDFBucket, finalChunkKey(1));
+          if (tagged1 || final1) {
+            // Chunks were created and processing started — count from downstream
+            const taggedCount = await countChunkObjects(s3, taggedKey);
+            const altTextCount = await countChunkObjects(s3, finalChunkKey);
+            const effectiveChunks = Math.max(taggedCount, altTextCount, 1);
+
+            if (altTextCount >= effectiveChunks && altTextCount > 0) {
+              if (!cancelled) { setCurrentStage(5); setProgress(70); setChunkInfo(''); }
+            } else if (taggedCount >= effectiveChunks && taggedCount > 0) {
+              const pct = effectiveChunks > 0 ? Math.floor((altTextCount / effectiveChunks) * 100) : 0;
+              if (!cancelled) {
+                setCurrentStage(4);
+                setProgress(40 + Math.floor(pct * 0.25));
+                setChunkInfo(effectiveChunks > 1 ? `${altTextCount} of ${effectiveChunks} chunks processed` : '');
+              }
+            } else {
+              if (!cancelled) {
+                setCurrentStage(3);
+                setProgress(20);
+                setChunkInfo(taggedCount > 0 ? `${taggedCount} chunks tagged` : '');
+              }
+            }
+          } else {
+            // Still splitting or waiting
+            if (!cancelled) { setCurrentStage(1); setProgress(10); setChunkInfo(''); }
+          }
+          return;
         }
-        return;
-      }
 
-      // Stage 5: Merger
-      const mergedExists = await objectExists(s3, PDFBucket, `temp/${basename}/merged_${basename}.pdf`);
+        // We know chunk count — check downstream progress
+        const preReportExists = await objectExists(s3, PDFBucket,
+          `temp/${basename}/accessability-report/${basename}_accessibility_report_before_remidiation.json`);
 
-      if (!mergedExists) {
-        if (!cancelled) {
-          setCurrentStage(5);
-          setProgress(70);
-          setChunkInfo('');
+        const taggedCount = await countChunkObjects(s3, taggedKey, chunkCount + 2);
+        const altTextCount = await countChunkObjects(s3, finalChunkKey, chunkCount + 2);
+
+        if (altTextCount >= chunkCount) {
+          // All alt-text done, waiting for merger
+          if (!cancelled) { setCurrentStage(5); setProgress(70); setChunkInfo(''); }
+        } else if (taggedCount >= chunkCount) {
+          // Tagging done, alt-text in progress
+          const pct = Math.floor((altTextCount / chunkCount) * 100);
+          const stagePct = 40 + Math.floor(pct * 0.25);
+          if (!cancelled) {
+            setCurrentStage(4);
+            setProgress(stagePct);
+            setChunkInfo(chunkCount > 1 ? `${altTextCount} of ${chunkCount} chunks processed` : '');
+          }
+        } else if (taggedCount > 0 || preReportExists) {
+          // Tagging in progress
+          const pct = chunkCount > 0 ? Math.floor((taggedCount / chunkCount) * 100) : 0;
+          const stagePct = 15 + Math.floor(pct * 0.25);
+          if (!cancelled) {
+            setCurrentStage(3);
+            setProgress(Math.max(preReportExists ? 15 : 12, stagePct));
+            setChunkInfo(chunkCount > 1 ? `${taggedCount} of ${chunkCount} chunks tagged` : '');
+          }
+        } else {
+          // Chunks exist but no tagging yet — pre-check stage
+          if (!cancelled) {
+            setCurrentStage(preReportExists ? 2 : 1);
+            setProgress(preReportExists ? 12 : 10);
+            setChunkInfo('');
+          }
         }
-        return;
-      }
-
-      // Stage 6: Final result
-      const finalKey = `result/COMPLIANT_${updatedFilename}`;
-      const finalExists = await objectExists(s3, PDFBucket, finalKey);
-
-      if (!finalExists) {
-        // Check for post-check report as a signal we're close
-        const postReportCount = await countObjects(s3, `temp/${basename}/accessability-report/COMPLIANT_${basename}_accessibility_report_after`);
-        if (!cancelled) {
-          setCurrentStage(postReportCount > 0 ? 7 : 6);
-          setProgress(postReportCount > 0 ? 95 : 85);
-          setChunkInfo('');
-        }
-        return;
-      }
-
-      // Done!
-      const desiredFilename = `COMPLIANT_${originalFileName}`;
-      const url = await generatePresignedUrl(PDFBucket, finalKey, desiredFilename);
-      if (!cancelled) {
-        setProgress(100);
-        setCurrentStage(STAGES.length - 1);
-        setChunkInfo('');
-        setDownloadUrl(url);
-        setIsFileReady(true);
-        onFileReady(url);
-        clearInterval(pollInterval);
-        clearInterval(timeInterval);
+      } catch (err) {
+        console.warn('Progress polling error:', err);
       }
     };
 
@@ -272,7 +307,7 @@ const ProcessingContainer = ({
       clearInterval(timeInterval);
       clearInterval(pollInterval);
     };
-  }, [updatedFilename, basename, isFileReady, selectedFormat, getS3Client, countObjects, objectExists, generatePresignedUrl, originalFileName, onFileReady]);
+  }, [updatedFilename, basename, isFileReady, selectedFormat, getS3Client, countChunkObjects, objectExists, generatePresignedUrl, originalFileName, onFileReady]);
 
   const stage = STAGES[currentStage] || STAGES[0];
 
@@ -317,10 +352,14 @@ const ProcessingContainer = ({
         ) : (
           <ResultsContainer
             fileName={originalFileName}
+            originalFileName={originalFileName}
+            updatedFilename={updatedFilename}
+            awsCredentials={awsCredentials}
             processedResult={{ url: downloadUrl }}
             format={selectedFormat}
             fileSize="File processed successfully"
-            processingTime="Processing completed"
+            processingTime={elapsedTime}
+            onNewUpload={onNewUpload}
           />
         )}
 

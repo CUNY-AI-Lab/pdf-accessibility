@@ -29,7 +29,7 @@ npm run build      # Production build (requires REACT_APP_* env vars)
 npm test           # Tests (stub only — no real test coverage)
 ```
 
-Required env vars for frontend build: `REACT_APP_AUTHORITY`, `REACT_APP_AWS_REGION`, `REACT_APP_PDF_BUCKET_NAME`, `REACT_APP_HOSTED_UI_URL`, `REACT_APP_IDENTITY_POOL_ID`, `REACT_APP_USER_POOL_CLIENT_ID`, `REACT_APP_USER_POOL_ID`, `REACT_APP_DOMAIN_PREFIX`, `REACT_APP_UPDATE_FIRST_SIGN_IN`, `REACT_APP_UPLOAD_QUOTA_API`. All defined in `src/utilities/constants.jsx`.
+Required env vars for frontend build: `REACT_APP_AUTHORITY`, `REACT_APP_AWS_REGION`, `REACT_APP_PDF_BUCKET_NAME`, `REACT_APP_HTML_BUCKET_NAME`, `REACT_APP_HOSTED_UI_URL`, `REACT_APP_IDENTITY_POOL_ID`, `REACT_APP_USER_POOL_CLIENT_ID`, `REACT_APP_USER_POOL_ID`, `REACT_APP_DOMAIN_PREFIX`, `REACT_APP_UPDATE_FIRST_SIGN_IN`, `REACT_APP_UPLOAD_QUOTA_API`. All defined in `src/utilities/constants.jsx`. For local builds, these must be in `pdf_ui/.env` (Amplify branch env vars are NOT injected into manual deploys).
 
 ### Automated Deployment
 ```bash
@@ -100,17 +100,17 @@ All Bedrock calls use the **Converse API** (not InvokeModel) for model-agnostic 
 
 ### Accessibility Checker
 
-`pdf_accessibility_checker.py` implements 26 PDF/UA + WCAG checks using pikepdf (structure tree) and PyMuPDF (content). The checker lives in `lambda/accessibility-checker-common/` and is copied to both `pre-` and `post-remediation-accessibility-checker/` directories — all three files must stay in sync.
+`pdf_accessibility_checker.py` implements 27 PDF/UA + WCAG checks using pikepdf (structure tree) and PyMuPDF (content). The checker lives in `lambda/accessibility-checker-common/` and is copied to both `pre-` and `post-remediation-accessibility-checker/` directories — all three files must stay in sync.
 
 **Automated checks include:**
-- Document: MarkInfo, StructTreeRoot, Lang, Title, DisplayDocTitle, PDF/UA ID, RoleMap, Font Embedding, Unicode Mapping, Artifact Marking
-- Navigation: Tab Order, Outlines, Reading Order (struct tree MCID vs visual layout), Annotation Tagging
-- Structure: Heading Nesting, Figure Alt Text, Table Headers/Scope, List Structure, Language of Parts, Symbolic Font ActualText
-- Links: Alt Text, Meaningful Text
+- Document: MarkInfo, StructTreeRoot, Lang, Title, DisplayDocTitle, PDF/UA ID, RoleMap, Font Embedding, Unicode Mapping, Artifact Marking (checks content streams for `/Artifact BMC` markers)
+- Navigation: Tab Order, Outlines (validates `/Count` and `/First`), Reading Order (struct tree MCID vs visual layout), Annotation Tagging
+- Structure: Heading Nesting (reports all skips), Figure Alt Text, Table Headers/Scope (fail not warn), List Structure (validates LI has LBody), Language of Parts, Symbolic Font ActualText
+- Links: Alt Text, Meaningful Text (checks for generic link text like "click here")
 - Forms: Field Labels (TU tooltip)
 - Visual: **Color Contrast** (automated via PyMuPDF pixmap + WCAG luminance formula — 4.5:1 normal, 3:1 large text), Text Reflow (manual), Non-Text Contrast (manual)
 
-**Color Contrast implementation** (`_check_color_contrast`): Renders each page at 72 DPI, extracts text spans with `page.get_text("dict")`, samples background color from 4 edge pixels around each text bbox via pixmap, calculates WCAG contrast ratio. Falls back to manual warning if pixmap rendering fails.
+**Color Contrast implementation** (`_check_color_contrast`): Renders each page at 150 DPI, extracts text spans with `page.get_text("dict")`, samples background color from 4 edge pixels around each text bbox via pixmap, calculates WCAG contrast ratio. Falls back to manual warning if pixmap rendering fails.
 
 **Reading Order implementation** (`_check_reading_order`): Detects multi-column layouts by analyzing horizontal gaps between text blocks. Single-column pages with top-to-bottom flow pass automatically. Multi-column pages trigger a warning with specific page numbers.
 
@@ -179,7 +179,7 @@ The merger (`lambda/pdf-merger-lambda-python/merger.py`) preserves accessibility
 - Theme defined in `src/theme.jsx`, color constants in `src/utilities/constants.jsx`
 
 ### Frontend Components
-- **ProcessingContainer**: Real-time progress bar that polls S3 every 10s for actual pipeline artifacts (chunks, tagged files, merged output). Shows percentage, current stage name, and per-chunk progress (e.g. "3 of 5 chunks tagged"). Uses `ListObjectsV2` to count intermediate files at each S3 prefix.
+- **ProcessingContainer**: Real-time progress bar that polls S3 every 10s for actual pipeline artifacts (chunks, tagged files, merged output). Shows percentage, current stage name, and per-chunk progress (e.g. "3 of 5 chunks tagged"). Uses `HeadObject` probing on individual chunk keys (not `ListObjectsV2`) because the Cognito authenticated role lacks `s3:ListBucket`.
 - **ResultsContainer**: "View Report" opens AccessibilityChecker dialog; "Download Report" downloads post-remediation JSON directly via presigned URL; "Download PDF" downloads the remediated file.
 - **LeftNav**: Sidebar with dynamic limits from Cognito custom attributes (`maxFilesAllowed`, `maxPagesAllowed`, `maxSizeAllowedMB` passed from MainApp). Zero-retention privacy note.
 - **UploadSection**: Supports drag-and-drop (`onDragOver`/`onDrop` handlers) and click-to-browse. Validates file type, size, and page count via pdf-lib before upload.

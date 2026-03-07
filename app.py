@@ -1,19 +1,16 @@
 import aws_cdk as cdk
 from aws_cdk import (
     Duration,
+    Size,
     Stack,
     aws_lambda as lambda_,
     aws_s3 as s3,
     aws_s3_notifications as s3n,
     aws_s3_deployment as s3deploy,
     aws_iam as iam,
-    aws_ec2 as ec2,
-    aws_ecs as ecs,
-    aws_ecr as ecr,
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as tasks,
     aws_logs as logs,
-    aws_ecr_assets as ecr_assets,
     aws_cloudwatch as cloudwatch,
 )
 from constructs import Construct
@@ -39,221 +36,104 @@ class PDFAccessibility(Stack):
         account_id = Stack.of(self).account
         region = Stack.of(self).region
 
-        # Docker images with zstd compression for faster Fargate cold starts
-        ai_tagger_image_asset = ecr_assets.DockerImageAsset(self, "AiTaggerImage",
-                                                         directory="ai-tagger-container",
-                                                         platform=ecr_assets.Platform.LINUX_AMD64,
-                                                         cache_to=ecr_assets.DockerCacheOption(
-                                                             type="inline"
-                                                         ),
-                                                         outputs=["type=image,compression=zstd,compression-level=3,force-compression=true"])
+        # Detect host architecture for Docker image builds
+        host_machine = platform.machine().lower()
+        print("Architecture of Machine:", host_machine)
+        if "arm" in host_machine:
+            lambda_arch = lambda_.Architecture.ARM_64
+        else:
+            lambda_arch = lambda_.Architecture.X86_64
 
-        alt_text_generator_image_asset = ecr_assets.DockerImageAsset(self, "AltTextGeneratorImage",
-                                                             directory="alt-text-generator-container",
-                                                             platform=ecr_assets.Platform.LINUX_AMD64,
-                                                             cache_to=ecr_assets.DockerCacheOption(
-                                                                 type="inline"
-                                                             ),
-                                                             outputs=["type=image,compression=zstd,compression-level=3,force-compression=true"])
-
-        # VPC with Public and Private Subnets
-        pdf_processing_vpc = ec2.Vpc(self, "PdfProcessingVpc",
-            max_azs=2,
-            nat_gateways=1,
-            subnet_configuration=[
-                ec2.SubnetConfiguration(
-                    subnet_type=ec2.SubnetType.PUBLIC,
-                    name="PdfProcessingPublic",
-                    cidr_mask=24,
-                ),
-                ec2.SubnetConfiguration(
-                    subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS,
-                    name="PdfProcessingPrivate",
-                    cidr_mask=24,
-                ),
-            ]
+        # --- AI Tagger Lambda (replaces ECS Fargate task) ---
+        ai_tagger_lambda = lambda_.DockerImageFunction(
+            self, "AiTaggerLambda",
+            code=lambda_.DockerImageCode.from_image_asset('lambda/ai-tagger-lambda'),
+            timeout=Duration.seconds(900),
+            memory_size=2048,
+            ephemeral_storage_size=Size.mebibytes(2048),
+            architecture=lambda_arch,
+            environment={
+                'BEDROCK_MODEL_ID_VISION': bedrock_vision_model,
+                'BEDROCK_MODEL_ID_TEXT': bedrock_text_model,
+            },
         )
 
-        # VPC Endpoints for faster ECR image pulls (reduces cold start by 10-15s)
-        pdf_processing_vpc.add_interface_endpoint("EcrApiEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.ECR
-        )
-        pdf_processing_vpc.add_interface_endpoint("EcrDockerEndpoint",
-            service=ec2.InterfaceVpcEndpointAwsService.ECR_DOCKER
-        )
-        pdf_processing_vpc.add_gateway_endpoint("S3Endpoint",
-            service=ec2.GatewayVpcEndpointAwsService.S3
-        )
+        pdf_processing_bucket.grant_read_write(ai_tagger_lambda)
 
-        # ECS Cluster
-        pdf_remediation_cluster = ecs.Cluster(self, "PdfRemediationCluster", vpc=pdf_processing_vpc)
-
-        ecs_task_execution_role = iam.Role(self, "EcsTaskRole",
-                                 assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-                                 managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy")
-            ])
-
-        ecs_task_role = iam.Role(self, "EcsTaskExecutionRole",
-            assumed_by=iam.ServicePrincipal("ecs-tasks.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name("service-role/AmazonECSTaskExecutionRolePolicy"),
-            ]
-        )
-
-        # Bedrock permissions for AI models (Converse API)
-        ecs_task_role.add_to_policy(iam.PolicyStatement(
+        # Bedrock permissions (Converse API)
+        ai_tagger_lambda.add_to_role_policy(iam.PolicyStatement(
             actions=["bedrock:InvokeModel", "bedrock:Converse"],
             resources=["*"],
         ))
 
-        # STS permissions for model ARN resolution
-        ecs_task_role.add_to_policy(iam.PolicyStatement(
+        # STS for model ARN resolution
+        ai_tagger_lambda.add_to_role_policy(iam.PolicyStatement(
             actions=["sts:GetCallerIdentity"],
             resources=["*"],
         ))
 
-        # S3 permissions - scoped to the processing bucket only
-        ecs_task_role.add_to_policy(iam.PolicyStatement(
-            actions=[
-                "s3:GetObject",
-                "s3:PutObject",
-                "s3:DeleteObject",
-            ],
-            resources=[
-                pdf_processing_bucket.bucket_arn,
-                f"{pdf_processing_bucket.bucket_arn}/*",
-            ],
-        ))
-
-        # Comprehend permissions for language detection
-        ecs_task_role.add_to_policy(iam.PolicyStatement(
+        # Comprehend for language detection
+        ai_tagger_lambda.add_to_role_policy(iam.PolicyStatement(
             actions=["comprehend:DetectDominantLanguage"],
             resources=["*"],
         ))
 
-        # Grant S3 read/write access to ECS Task Role
-        pdf_processing_bucket.grant_read_write(ecs_task_execution_role)
+        # CloudWatch metrics
+        cloudwatch_metrics_policy = iam.PolicyStatement(
+            actions=["cloudwatch:PutMetricData"],
+            resources=["*"],
+        )
+        ai_tagger_lambda.add_to_role_policy(cloudwatch_metrics_policy)
 
-        # Create ECS Task Log Groups
-        ai_tagger_log_group = logs.LogGroup(self, "AiTaggerContainerLogs",
-                                                log_group_name="/ecs/pdf-remediation/ai-tagger",
-                                                retention=logs.RetentionDays.ONE_MONTH,
-                                                removal_policy=cdk.RemovalPolicy.DESTROY)
+        # --- Alt-Text Generator Lambda (replaces ECS Fargate task) ---
+        alt_text_lambda = lambda_.DockerImageFunction(
+            self, "AltTextLambda",
+            code=lambda_.DockerImageCode.from_image_asset('lambda/alt-text-lambda'),
+            timeout=Duration.seconds(900),
+            memory_size=2048,
+            ephemeral_storage_size=Size.mebibytes(2048),
+            architecture=lambda_arch,
+            environment={
+                'BEDROCK_MODEL_ID_VISION': bedrock_vision_model,
+                'BEDROCK_MODEL_ID_TEXT': bedrock_text_model,
+            },
+        )
 
-        alt_text_generator_log_group = logs.LogGroup(self, "AltTextGeneratorContainerLogs",
-                                                    log_group_name="/ecs/pdf-remediation/alt-text-generator",
-                                                    retention=logs.RetentionDays.ONE_MONTH,
-                                                    removal_policy=cdk.RemovalPolicy.DESTROY)
+        pdf_processing_bucket.grant_read_write(alt_text_lambda)
 
-        # ECS Task Definitions - AI Tagger (increased resources for PDF rendering)
-        ai_tagger_task_def = ecs.FargateTaskDefinition(self, "AiTaggerTaskDefinition",
-                                                      memory_limit_mib=2048,
-                                                      cpu=512,
-                                                      execution_role=ecs_task_execution_role,
-                                                      task_role=ecs_task_role,
-                                                     )
-
-        ai_tagger_container_def = ai_tagger_task_def.add_container("ai-tagger-container",
-                                                                  image=ecs.ContainerImage.from_registry(ai_tagger_image_asset.image_uri),
-                                                                  memory_limit_mib=2048,
-                                                                  logging=ecs.LogDrivers.aws_logs(
-            stream_prefix="AiTaggerLogs",
-            log_group=ai_tagger_log_group,
+        alt_text_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=["bedrock:InvokeModel", "bedrock:Converse"],
+            resources=["*"],
         ))
 
-        alt_text_task_def = ecs.FargateTaskDefinition(self, "AltTextGenerationTaskDefinition",
-                                                      memory_limit_mib=1024,
-                                                      cpu=256, execution_role=ecs_task_execution_role, task_role=ecs_task_role,
-                                                      )
-
-        alt_text_container_def = alt_text_task_def.add_container("alt-text-llm-container",
-                                                                  image=ecs.ContainerImage.from_registry(alt_text_generator_image_asset.image_uri),
-                                                                  memory_limit_mib=1024,
-                                                                   logging=ecs.LogDrivers.aws_logs(
-            stream_prefix="AltTextGeneratorLogs",
-            log_group=alt_text_generator_log_group
+        alt_text_lambda.add_to_role_policy(iam.PolicyStatement(
+            actions=["sts:GetCallerIdentity"],
+            resources=["*"],
         ))
 
-        # ECS Tasks in Step Functions
-        ai_tagger_task = tasks.EcsRunTask(self, "RunAiTaggerTask",
-                                      integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-                                      cluster=pdf_remediation_cluster,
-                                      task_definition=ai_tagger_task_def,
-                                      assign_public_ip=False,
-                                      result_path="$.ai_tagger_result",
+        alt_text_lambda.add_to_role_policy(cloudwatch_metrics_policy)
 
-                                      container_overrides=[tasks.ContainerOverride(
-                                       container_definition = ai_tagger_container_def,
-                                          environment=[
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="S3_BUCKET_NAME",
-                                                  value=sfn.JsonPath.string_at("$.s3_bucket")
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="S3_FILE_KEY",
-                                                  value=sfn.JsonPath.string_at("$.s3_key")
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="S3_CHUNK_KEY",
-                                                  value=sfn.JsonPath.string_at("$.chunk_key")
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="AWS_REGION",
-                                                  value=region
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="BEDROCK_MODEL_ID_VISION",
-                                                  value=bedrock_vision_model
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="BEDROCK_MODEL_ID_TEXT",
-                                                  value=bedrock_text_model
-                                              ),
-                                          ]
-                                      )],
-                                      launch_target=tasks.EcsFargateLaunchTarget(
-                                          platform_version=ecs.FargatePlatformVersion.LATEST
-                                      ),
-                                      propagated_tag_source=ecs.PropagatedTagSource.TASK_DEFINITION,
-                                     )
+        # --- Step Functions tasks for AI Tagger and Alt-Text (Lambda) ---
+        ai_tagger_task = tasks.LambdaInvoke(
+            self, "RunAiTaggerTask",
+            lambda_function=ai_tagger_lambda,
+            payload=sfn.TaskInput.from_object({
+                "s3_bucket.$": "$.s3_bucket",
+                "s3_key.$": "$.s3_key",
+                "chunk_key.$": "$.chunk_key",
+            }),
+            result_path="$.ai_tagger_result",
+        )
 
-        alt_text_generation_task = tasks.EcsRunTask(self, "RunAltTextGenerationTask",
-                                      integration_pattern=sfn.IntegrationPattern.RUN_JOB,
-                                      cluster=pdf_remediation_cluster,
-                                      task_definition=alt_text_task_def,
-                                      assign_public_ip=False,
-
-                                      container_overrides=[tasks.ContainerOverride(
-                                          container_definition=alt_text_container_def,
-                                          environment=[
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="S3_BUCKET_NAME",
-                                                  value=sfn.JsonPath.string_at("$.s3_bucket")
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="S3_FILE_KEY",
-                                                  value=sfn.JsonPath.string_at("$.s3_key")
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="AWS_REGION",
-                                                  value=region
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="BEDROCK_MODEL_ID_VISION",
-                                                  value=bedrock_vision_model
-                                              ),
-                                              tasks.TaskEnvironmentVariable(
-                                                  name="BEDROCK_MODEL_ID_TEXT",
-                                                  value=bedrock_text_model
-                                              ),
-                                          ]
-                                      )],
-                                      launch_target=tasks.EcsFargateLaunchTarget(
-                                          platform_version=ecs.FargatePlatformVersion.LATEST
-                                      ),
-                                      propagated_tag_source=ecs.PropagatedTagSource.TASK_DEFINITION,
-                                      )
+        alt_text_generation_task = tasks.LambdaInvoke(
+            self, "RunAltTextGenerationTask",
+            lambda_function=alt_text_lambda,
+            payload=sfn.TaskInput.from_object({
+                "s3_bucket.$": "$.s3_bucket",
+                "s3_key.$": "$.s3_key",
+            }),
+            result_path="$.alt_text_result",
+        )
 
         # Step Function Map State - reduced concurrency to avoid Bedrock rate limiting
         pdf_chunks_map_state = sfn.Map(self, "ProcessPdfChunksInParallel",
@@ -263,20 +143,16 @@ class PDFAccessibility(Stack):
 
         pdf_chunks_map_state.iterator(ai_tagger_task.next(alt_text_generation_task))
 
-        cloudwatch_metrics_policy = iam.PolicyStatement(
-                    actions=["cloudwatch:PutMetricData"],
-                    resources=["*"],
-        )
-        pdf_merger_lambda = lambda_.Function(
+        pdf_merger_lambda = lambda_.DockerImageFunction(
             self, 'PdfMergerLambda',
-            runtime=lambda_.Runtime.JAVA_21,
-            handler='com.example.App::handleRequest',
-            code=lambda_.Code.from_asset('lambda/pdf-merger-lambda/PDFMergerLambda/target/PDFMergerLambda-1.0-SNAPSHOT.jar'),
+            code=lambda_.DockerImageCode.from_image_asset('lambda/pdf-merger-lambda-python'),
+            timeout=Duration.seconds(900),
+            memory_size=2048,
+            ephemeral_storage_size=Size.mebibytes(2048),
+            architecture=lambda_arch,
             environment={
                 'BUCKET_NAME': pdf_processing_bucket.bucket_name
             },
-            timeout=Duration.seconds(900),
-            memory_size=1024
         )
 
         pdf_merger_lambda.add_to_role_policy(cloudwatch_metrics_policy)
@@ -287,14 +163,6 @@ class PDFAccessibility(Stack):
                      }),
                                       output_path=sfn.JsonPath.string_at("$.Payload"))
         pdf_processing_bucket.grant_read_write(pdf_merger_lambda)
-
-        # Define the Add Title Lambda function
-        host_machine = platform.machine().lower()
-        print("Architecture of Machine:",host_machine)
-        if "arm" in host_machine:
-            lambda_arch = lambda_.Architecture.ARM_64
-        else:
-            lambda_arch = lambda_.Architecture.X86_64
 
         title_generator_lambda = lambda_.DockerImageFunction(
             self, 'BedrockTitleGeneratorLambda',
@@ -424,10 +292,12 @@ class PDFAccessibility(Stack):
         # Pass State Machine ARN to Lambda as an Environment Variable
         pdf_splitter_lambda.add_environment("STATE_MACHINE_ARN", pdf_remediation_state_machine.state_machine_arn)
 
-        # Store log group names dynamically
+        # Store log group names dynamically for CloudWatch dashboard
         pdf_splitter_lambda_log_group_name = f"/aws/lambda/{pdf_splitter_lambda.function_name}"
         pdf_merger_lambda_log_group_name = f"/aws/lambda/{pdf_merger_lambda.function_name}"
         title_generator_lambda_log_group_name = f"/aws/lambda/{title_generator_lambda.function_name}"
+        ai_tagger_lambda_log_group_name = f"/aws/lambda/{ai_tagger_lambda.function_name}"
+        alt_text_lambda_log_group_name = f"/aws/lambda/{alt_text_lambda.function_name}"
         pre_remediation_checker_log_group_name = f"/aws/lambda/{pre_remediation_accessibility_checker.function_name}"
         post_remediation_checker_log_group_name = f"aws/lambda/{post_remediation_accessibility_checker.function_name}"
 
@@ -448,7 +318,7 @@ class PDFAccessibility(Stack):
         dashboard.add_widgets(
             cloudwatch.LogQueryWidget(
                 title="File status",
-                log_group_names=[pdf_splitter_lambda_log_group_name, pdf_merger_lambda_log_group_name, ai_tagger_log_group.log_group_name, alt_text_generator_log_group.log_group_name],
+                log_group_names=[pdf_splitter_lambda_log_group_name, pdf_merger_lambda_log_group_name, ai_tagger_lambda_log_group_name, alt_text_lambda_log_group_name],
                 query_string='''fields @timestamp, @message
                     | parse @message "File: *, Status: *" as file, status
                     | stats latest(status) as latestStatus by file
@@ -474,7 +344,7 @@ class PDFAccessibility(Stack):
             ),
             cloudwatch.LogQueryWidget(
                 title="AI Tagger Processing Logs",
-                log_group_names=[ai_tagger_log_group.log_group_name],
+                log_group_names=[ai_tagger_lambda_log_group_name],
                 query_string='''fields @message
                                 | filter @message like /filename/''',
                 width=24,
@@ -482,7 +352,7 @@ class PDFAccessibility(Stack):
             ),
             cloudwatch.LogQueryWidget(
                 title="Alt Text Generation Logs",
-                log_group_names=[alt_text_generator_log_group.log_group_name],
+                log_group_names=[alt_text_lambda_log_group_name],
                 query_string='''fields @message
                                 | filter @message like /filename/''',
                 width=24,
