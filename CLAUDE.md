@@ -155,13 +155,17 @@ The merger (`lambda/pdf-merger-lambda-python/merger.py`) preserves accessibility
 ### Step Functions State
 - The Parallel state runs two branches simultaneously on the same input
 - LambdaInvoke results stored via `result_path` (e.g., `result_path="$.ai_tagger_result"`)
+- AI Tagger and Alt-Text tasks have 14-minute timeouts and 2 retries with exponential backoff (`add_retry` with `backoff_rate=2.0`)
 - Merger task uses `output_path=$.Payload` — subsequent tasks receive the raw merger string output
 - Title Generator task has no `output_path` — post-checker receives the full LambdaInvoke envelope and navigates `event.Payload.body`
 
-### Bedrock Limits
+### Bedrock Limits & Throttling
 - Qwen models have ~1MB image payload limit. Images are resized via `sharp` (Node) before sending.
 - Context text truncated to 4000 chars to avoid payload limits.
 - Converse API response: extract text via `response['output']['message']['content']` — iterate blocks looking for `'text'` key (some models structure content blocks differently).
+- Alt-Text Lambda uses exponential backoff between image Bedrock calls (1s base, doubles on failure, caps at 15s). Aborts after 5 consecutive failures.
+- Link alt-text generation uses concurrency pool (max 3 concurrent Bedrock calls) to avoid throttling. Falls back to URL-based alt text on failure.
+- Bedrock client (`bedrock_client.js`) uses aggressive backoff for throttling errors (3s base with 3x multiplier vs 1s for other errors).
 
 ### PyMuPDF TOC
 - `doc.set_toc()` requires first entry at level 1 with no jumps > 1 between consecutive entries. Normalize heading levels before calling.
@@ -188,7 +192,7 @@ The merger (`lambda/pdf-merger-lambda-python/merger.py`) preserves accessibility
 
 - No VPC required — all Lambdas access Bedrock, S3, and Comprehend over public endpoints
 - All Docker Lambdas: 2048 MiB memory, 2048 MiB ephemeral storage, 900s timeout (except Title Generator: 1024 MiB, Pre/Post Checker: 512 MiB)
-- Step Functions Map concurrency: 15 (configurable, reduced for Bedrock rate limiting)
+- Step Functions Map concurrency: 5 (reduced from 15 to avoid Bedrock throttling cascades)
 - CloudWatch dashboard defined in `app.py` with `$filename` pattern variable for filtering
 - Cognito user pool with custom attributes for per-user quotas (`custom:max_files_allowed`, etc.) — see `docs/CONFIGURING_LIMITS.md`
 - A `LambdaNodejsUpgradeAspect` CDK Aspect in `app.py` auto-upgrades any CDK-generated Node.js 20.x Lambdas to 22.x (future-proofing for runtime deprecations)

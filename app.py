@@ -123,6 +123,14 @@ class PDFAccessibility(Stack):
                 "chunk_key.$": "$.chunk_key",
             }),
             result_path="$.ai_tagger_result",
+            task_timeout=sfn.Timeout.duration(Duration.minutes(14)),
+            retry_on_service_exceptions=True,
+        )
+        ai_tagger_task.add_retry(
+            errors=["States.TaskFailed"],
+            interval=Duration.seconds(10),
+            max_attempts=2,
+            backoff_rate=2.0,
         )
 
         alt_text_generation_task = tasks.LambdaInvoke(
@@ -133,11 +141,19 @@ class PDFAccessibility(Stack):
                 "s3_key.$": "$.s3_key",
             }),
             result_path="$.alt_text_result",
+            task_timeout=sfn.Timeout.duration(Duration.minutes(14)),
+            retry_on_service_exceptions=True,
+        )
+        alt_text_generation_task.add_retry(
+            errors=["States.TaskFailed"],
+            interval=Duration.seconds(10),
+            max_attempts=2,
+            backoff_rate=2.0,
         )
 
         # Step Function Map State - reduced concurrency to avoid Bedrock rate limiting
         pdf_chunks_map_state = sfn.Map(self, "ProcessPdfChunksInParallel",
-                            max_concurrency=15,
+                            max_concurrency=5,
                             items_path=sfn.JsonPath.string_at("$.chunks"),
                             result_path="$.MapResults")
 
