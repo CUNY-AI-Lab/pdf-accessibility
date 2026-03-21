@@ -29,3 +29,17 @@ PDF_accessability_UI/
 # Frontend build artifacts
 pdf_ui/node_modules/
 pdf_ui/build/
+
+# Environment files (may contain secrets)
+.env
+**/.env
+**/.env.*
+
+# Claude Code local settings (contains AWS resource IDs)
+.claude/
+
+# Playwright MCP logs (contain auth tokens and resource IDs)
+.playwright-mcp/
+
+# Screenshots (not needed in repo)
+*.png

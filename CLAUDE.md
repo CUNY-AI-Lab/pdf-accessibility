@@ -171,11 +171,10 @@ The merger (`lambda/pdf-merger-lambda-python/merger.py`) preserves accessibility
 - `doc.set_toc()` requires first entry at level 1 with no jumps > 1 between consecutive entries. Normalize heading levels before calling.
 
 ### Frontend Deployment
-- Amplify app ID: `d393yvevcz4di3`, branch: `main`
 - Amplify manual deploy: zip must contain files at root, not inside a `build/` subdirectory: `cd build && zip -r ../deploy.zip .`
 - Deploy sequence: `aws amplify create-deployment` → `curl -T` zip to presigned URL → `aws amplify start-deployment`
-- `REACT_APP_AUTHORITY` must NOT include `https://` — `App.js` prepends it automatically. Use bare domain: `cognito-idp.us-east-1.amazonaws.com/<pool-id>`
-- All env vars are stored on the Amplify branch (not app level) — fetch with `aws amplify get-branch --app-id d393yvevcz4di3 --branch-name main --query 'branch.environmentVariables'`
+- `REACT_APP_AUTHORITY` must NOT include `https://` — `App.js` prepends it automatically. Use bare domain: `cognito-idp.<region>.amazonaws.com/<pool-id>`
+- All env vars are stored on the Amplify branch (not app level) — fetch with `aws amplify get-branch --app-id <APP_ID> --branch-name main --query 'branch.environmentVariables'`
 
 ### Frontend Design
 - Palette matches CUNY AI Lab website (ailab.gc.cuny.edu): navy `#1D3A83`, vibrant blue `#3B73E6`, teal `#2FB8D6`, cream `#FAFCF8`

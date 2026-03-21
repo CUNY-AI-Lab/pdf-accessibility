@@ -2,47 +2,25 @@
 
 This repository provides two complementary solutions for PDF accessibility:
 
-1. **PDF-to-PDF Remediation**: Processes PDFs and maintains the PDF format while improving accessibility.
-2. **PDF-to-HTML Remediation**: Converts PDFs to accessible HTML format.
+1. **PDF-to-PDF Remediation**: Processes PDFs and maintains the PDF format while improving accessibility using AI-powered tagging.
+2. **PDF-to-HTML Remediation**: Converts PDFs to accessible HTML format using AWS Bedrock Data Automation.
 
 Both solutions leverage AWS services and generative AI to improve content accessibility according to WCAG 2.1 Level AA standards.
 
-## Disclaimers
-Customers are responsible for making their own independent assessment of the information in this document.
-
-This document:
-
-(a) is for informational purposes only,
-
-(b) references AWS product offerings and practices, which are subject to change without notice,
-
-(c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided "as is" without warranties, representations, or conditions of any kind, whether express or implied. The responsibilities and liabilities of AWS to its customers are controlled by AWS agreements, and this document is not part of, nor does it modify, any agreement between AWS and its customers, and
-
-(d) is not to be considered a recommendation or viewpoint of AWS.
-
-Additionally, you are solely responsible for testing, security and optimizing all code and assets on GitHub repo, and all such code and assets should be considered:
-
-(a) as-is and without warranties or representations of any kind,
-
-(b) not suitable for production environments, or on production or other critical data, and
-
-(c) to include shortcuts in order to support rapid prototyping such as, but not limited to, relaxed authentication and authorization and a lack of strict adherence to security best practices.
-
-All work produced is open source. More information can be found in the GitHub repo.
-
 ## Table of Contents
 
-| Index                                                                               | Description                                             |
-| ----------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| [Architecture Overview](#architecture-overview)                                     | High level overview illustrating component interactions |
-| [Automated One Click Deployment](#automated-one-click-deployment)                   | How to deploy the project                               |
-| [Testing Your PDF Accessibility Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution                     |
-| [PDF-to-PDF Remediation Solution](#pdf-to-pdf-remediation-solution)                 | PDF format preservation solution details                |
-| [PDF-to-HTML Remediation Solution](#pdf-to-html-remediation-solution)               | HTML conversion solution details                        |
-| [Configuring Limits](docs/CONFIGURING_LIMITS.md)                                   | How to modify document limits, quotas, and defaults     |
-| [Monitoring](#monitoring)                                                           | System monitoring and observability                     |
-| [Troubleshooting](#troubleshooting)                                                 | Common issues and solutions                             |
-| [Contributing](#contributing)                                                       | How to contribute to the project                        |
+| Index | Description |
+|---|---|
+| [Architecture Overview](#architecture-overview) | High level overview illustrating component interactions |
+| [Deployment](#deployment) | How to deploy the project |
+| [Testing Your Solution](#testing-your-pdf-accessibility-solution) | User guide for the working solution |
+| [PDF-to-PDF Solution](#pdf-to-pdf-remediation-solution) | PDF format preservation solution details |
+| [PDF-to-HTML Solution](#pdf-to-html-remediation-solution) | HTML conversion solution details |
+| [Frontend](#frontend) | React web application |
+| [Configuring Limits](docs/CONFIGURING_LIMITS.md) | How to modify document limits, quotas, and defaults |
+| [Monitoring](#monitoring) | System monitoring and observability |
+| [Troubleshooting](#troubleshooting) | Common issues and solutions |
+| [Contributing](#contributing) | How to contribute to the project |
 
 ## Architecture Overview
 
@@ -50,216 +28,171 @@ The following architecture diagram illustrates the various AWS components utiliz
 
 ![Architecture Diagram](docs/images/architecture.png)
 
-## Automated One Click Deployment
+### PDF-to-PDF Pipeline
 
-We provide a **unified deployment script** that allows you to deploy either or both the solutions with a single command. Choose your preferred solution during deployment:
+```
+S3 Upload (pdf/) → PDF Splitter → Step Functions Parallel:
+  Branch 1: Map(AI Tagger → Alt-Text Generator) → Merger → Title Generator → Post-Check
+  Branch 2: Pre-Check (audits original PDF)
+```
+
+All processing is serverless using AWS Lambda (Docker containers). AI-powered tagging and alt-text generation use Amazon Bedrock vision and text models via the Converse API.
+
+### Key Components
+
+| Component | Path | Language | Runtime |
+|---|---|---|---|
+| CDK Stack | `app.py` | Python | CDK |
+| AI Tagger | `lambda/ai-tagger-lambda/` | Python | Docker Lambda |
+| Alt-Text Generator | `lambda/alt-text-lambda/` | Node.js | Docker Lambda |
+| PDF Splitter | `lambda/pdf-splitter-lambda/` | Python | Zip Lambda |
+| PDF Merger | `lambda/pdf-merger-lambda-python/` | Python | Docker Lambda |
+| Title Generator | `lambda/title-generator-lambda/` | Python | Docker Lambda |
+| Pre/Post Checker | `lambda/{pre,post}-remediation-accessibility-checker/` | Python | Docker Lambda |
+| Frontend | `pdf_ui/` | React 19 | AWS Amplify |
+
+## Deployment
 
 ### Prerequisites
 
-**Common Requirements:**
+1. **AWS Account** with permissions to create Lambda, S3, Step Functions, Bedrock, Cognito, and CloudWatch resources
+2. **AWS CLI** configured with appropriate credentials
+3. **Docker** installed and running (required for building Lambda container images)
+4. **Node.js 22+** and **Python 3.12+**
+5. **AWS CDK** installed (`npm install -g aws-cdk`)
+6. **Bedrock model access** granted for your chosen vision and text models
 
-1. **AWS Account** with appropriate permissions to create and manage AWS resources
-   - See [IAM Permissions Guide](docs/IAM_PERMISSIONS.md) for detailed permission requirements
-2. **AWS CloudShell access** (AWS CLI is pre-installed and configured automatically)
-   - Sign in to the AWS Management Console
-   - In the top navigation bar, click the CloudShell icon (terminal symbol) next to the search bar
-   - Wait for CloudShell to initialize (this may take a few moments on first use)
-
-**Solution-Specific Requirements:**
-
-- **PDF-to-PDF**:
-  - **Adobe API Access** - An enterprise-level contract or a trial account (For Testing) for Adobe's API is required.
-    - [Adobe PDF Services API](https://acrobatservices.adobe.com/dc-integration-creation-app-cdn/main.html) to obtain API credentials.
-- **PDF-to-HTML**: AWS Bedrock Data Automation service access
-  - Ensure you have access to create a Bedrock Data Automation project - usually present by default
-
-### One-Click Deployment
-
-**Step 1: Open AWS CloudShell and Clone the Repository**
+### CDK Deployment (PDF-to-PDF)
 
 ```bash
-git clone https://github.com/ASUCICREPO/PDF_Accessibility.git
-cd PDF_Accessibility
+git clone https://github.com/CUNY-AI-Lab/pdf-accessibility.git
+cd pdf-accessibility
+pip install -r requirements.txt
+cdk synth
+cdk deploy PDFAccessibility \
+  -c bedrock_vision_model=qwen.qwen3-vl-235b-a22b \
+  -c bedrock_text_model=openai.gpt-oss-120b-1:0
 ```
 
-**Step 2: Run the Unified Deployment Script**
+The vision and text models are configurable via CDK context. Any model available through Bedrock's Converse API can be used. Cross-region inference profile IDs (e.g. `us.qwen.*`) are resolved to full ARNs automatically.
+
+### Automated Deployment
 
 ```bash
 chmod +x deploy.sh
 ./deploy.sh
 ```
 
-**Step 3: Follow the Interactive Prompts**
+The script guides you through solution selection, model configuration, and deployment via CodeBuild.
 
-The script will guide you through:
-
-1. **Solution Selection**: Choose between PDF-to-PDF or PDF-to-HTML remediation
-2. **Solution-Specific Setup**:
-   - **PDF-to-PDF**: Enter Adobe API credentials (stored securely in AWS Secrets Manager)
-   - **PDF-to-HTML**: Automatic creation of Bedrock Data Automation project
-3. **Automated Deployment**: Real-time monitoring of the deployment progress
-4. **Optional UI Deployment**: After successful deployment of your chosen solution(s), you'll have the option to deploy a user interface as well
-
-**Step 4: Test Your Deployment**
-
-After successful deployment, the script provides specific testing instructions for your chosen solution.
-
-### Testing Your PDF Accessibility Solution
-
-#### PDF-to-PDF Solution Testing
-
-1. **Navigate to Your S3 Bucket**
-
-   - In the AWS S3 Console, find the bucket starting with `pdfaccessibility-`
-   - This bucket was automatically created during deployment
-
-2. **Upload Your PDF Files**
-
-   - Upload any PDF file(s) to the `pdf/` folder
-   - **Note**: The `pdf/` folder is automatically created when you upload files - no manual folder creation needed
-   - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
-   - The process automatically triggers when files are uploaded
-
-3. **Monitor Processing**
-
-   - **Temporary Files**: A `temp/` folder will be created containing intermediate processing files
-   - **Final Results**: A `result/` folder will be created with your accessibility-compliant PDF files
-   - Use the CloudWatch dashboard to monitor processing progress
-
-4. **Download Results**
-   - Navigate to the `result/` folder to access your remediated PDFs
-   - Files maintain their original names with "COMPLIANT" prefix after accessibility improvements applied
-
-#### PDF-to-HTML Solution Testing
-
-1. **Navigate to Your S3 Bucket**
-
-   - In the AWS S3 Console, find the bucket starting with `pdf2html-bucket-`
-   - This bucket was automatically created during deployment
-
-2. **Upload Your PDF Files**
-
-   - Navigate to the `uploads/` folder (created automatically during deployment)
-   - **Bulk Processing**: You can upload multiple PDFs in the bucket for batch remediation
-   - The process automatically triggers when files are uploaded
-
-3. **Monitor Processing**
-
-   - Two folders will be created automatically:
-     - **`output/`**: Contains temporary processing data and intermediate files
-     - **`remediated/`**: Contains the final remediated results
-
-4. **Access Your Results**
-
-   - Navigate to the `remediated/` folder
-   - Download the zip file named `final_{your-filename}.zip`
-
-5. **Explore the Remediated Content**
-   The downloaded zip file contains:
-   - **`remediated.html`**: Final accessibility-compliant HTML version
-   - **`result.html`**: Original HTML conversion (before remediation)
-   - **`images/` folder**: Extracted images with generated alt text
-   - **`remediation_report.html`**: Detailed report of accessibility improvements made
-   - **`usage_data.json`**: Processing metrics and usage statistics
-
-### Advanced Usage
-
-**Redeployment**
-After initial deployment, you can redeploy using the created CodeBuild project:
+### PDF-to-HTML Deployment (TypeScript CDK)
 
 ```bash
-aws codebuild start-build --project-name YOUR-PROJECT-NAME --source-version main
+cd pdf2html/cdk && npm install && npx cdk deploy
 ```
 
-Or simply re-run the deployment script and choose the solution your want redeploy.
+## Testing Your PDF Accessibility Solution
+
+### PDF-to-PDF Solution Testing
+
+1. **Upload**: In the S3 bucket (starting with `pdfaccessibility-`), upload PDF files to the `pdf/` folder. Processing triggers automatically.
+2. **Monitor**: Watch the CloudWatch dashboard or Step Functions console. The `temp/` folder contains intermediate files.
+3. **Results**: Remediated PDFs appear in the `result/` folder with a `COMPLIANT_` prefix.
+
+### PDF-to-HTML Solution Testing
+
+1. **Upload**: In the S3 bucket (starting with `pdf2html-bucket-`), upload PDF files to the `uploads/` folder.
+2. **Results**: Download `final_{filename}.zip` from the `remediated/` folder, containing:
+   - `remediated.html` — Accessible HTML version
+   - `images/` — Extracted images with generated alt text
+   - `remediation_report.html` — Detailed accessibility improvements report
 
 ## PDF-to-PDF Remediation Solution
 
-### Overview
+### How It Works
 
-This solution processes PDFs while maintaining the original PDF format. It uses AWS CDK to build infrastructure that splits PDFs into chunks, processes them via AWS Step Functions, and merges the results using ECS tasks.
+1. **PDF Splitter** splits uploaded PDFs into 5-page chunks
+2. **AI Tagger** analyzes each chunk with a Bedrock vision model to build a PDF/UA structure tree (headings, paragraphs, lists, tables, figures)
+3. **Alt-Text Generator** generates WCAG-compliant alt text for all images and links using Bedrock models, with throttle protection and exponential backoff
+4. **PDF Merger** reassembles chunks, preserving structure trees, MCIDs, and page references
+5. **Title Generator** adds an accessible document title using a Bedrock text model
+6. **Accessibility Checker** runs 27 automated PDF/UA + WCAG checks (color contrast, reading order, heading nesting, figure alt text, table headers, etc.)
 
-### Architecture
+### Accessibility Checker
 
-- **S3 Bucket**: Stores input and processed PDFs
-- **Lambda Functions**: PDF splitting, merging, and accessibility checking
-- **Step Functions**: Orchestrates the processing workflow
-- **ECS Fargate**: Runs containerized processing tasks
-- **CloudWatch Dashboard**: Monitors progress and performance
+The checker (`pdf_accessibility_checker.py`) runs automated checks across these categories:
 
-### Manual Deployment
-
-For detailed manual deployment instructions, see our [Manual Deployment Guide](docs/MANUAL_DEPLOYMENT.md).
+- **Document**: MarkInfo, StructTreeRoot, Lang, Title, PDF/UA ID, Font Embedding, Unicode Mapping, Artifact Marking
+- **Navigation**: Tab Order, Outlines, Reading Order, Annotation Tagging
+- **Structure**: Heading Nesting, Figure Alt Text, Table Headers/Scope, List Structure, Language of Parts
+- **Links**: Alt Text, Meaningful Text (detects generic text like "click here")
+- **Forms**: Field Labels
+- **Visual**: Color Contrast (automated via WCAG luminance formula — 4.5:1 normal, 3:1 large text)
 
 ## PDF-to-HTML Remediation Solution
 
-### Overview
+Converts PDF documents to accessible HTML using AWS Bedrock Data Automation for PDF parsing. Deployed as a separate TypeScript CDK stack with a single Lambda function.
 
-This solution converts PDF documents to accessible HTML format while preserving layout and visual appearance. It leverages AWS Bedrock Data Automation for PDF parsing and uses a serverless Lambda architecture.
+## Frontend
 
-### Architecture
+The React 19 + MUI 6 web application (`pdf_ui/`) provides:
 
-- **S3 Bucket**: Stores input PDFs and remediated HTML files
-- **Lambda Function**: Processes PDFs using containerized accessibility utility
-- **ECR Repository**: Hosts the Docker image for Lambda
-- **Bedrock Data Automation**: Provides PDF parsing and extraction capabilities
+- Drag-and-drop PDF upload with file validation (type, size, page count)
+- Real-time processing progress that polls S3 for pipeline artifacts
+- Side-by-side before/after accessibility reports
+- Download for remediated PDFs and accessibility reports
+- OIDC authentication via Amazon Cognito
+
+### Running Locally
+
+```bash
+cd pdf_ui
+npm install
+npm start
+```
+
+Requires environment variables in `pdf_ui/.env` — see `src/utilities/constants.jsx` for the full list.
+
+### Deploying to Amplify
+
+```bash
+cd pdf_ui && npm run build
+cd build && zip -r ../deploy.zip .
+aws amplify create-deployment --app-id <APP_ID> --branch-name main
+# Upload zip to presigned URL, then start deployment
+```
 
 ## Monitoring
 
-### PDF-to-PDF Solution
+- **CloudWatch Dashboard**: Auto-created during deployment with per-file filtering
+- **Step Functions Console**: Monitor workflow executions and individual task status
+- **Lambda Logs**: Each Lambda writes to its own CloudWatch log group
 
-- **CloudWatch Dashboard**: Automatically created during deployment
-- **Step Functions Console**: Monitor workflow executions
-- **ECS Console**: Track container task status
+### Verifying Pipeline After Deploy
 
-### PDF-to-HTML Solution
+```bash
+# Check latest Step Functions execution
+aws stepfunctions list-executions \
+  --state-machine-arn "$(aws stepfunctions list-state-machines \
+    --query 'stateMachines[?contains(name,`PdfAccessibility`)].stateMachineArn' \
+    --output text)" \
+  --max-results 3 --query 'executions[*].[status,startDate]' --output table
 
-- **Lambda Logs**: `/aws/lambda/Pdf2HtmlPipeline`
-- **S3 Events**: Monitor file processing status
-- **CloudWatch Metrics**: Track function performance
+# Check Lambda logs
+aws logs tail "/aws/lambda/<FUNCTION_NAME>" --since 30m
+```
 
 ## Troubleshooting
 
 ### Common Issues
 
-**AWS Credentials**
+**Bedrock Throttling**: The pipeline uses exponential backoff and concurrency limits to handle Bedrock rate limiting. If processing stalls, check CloudWatch logs for throttling errors. Map state concurrency is set to 5 to avoid overwhelming Bedrock.
 
-- Ensure AWS CLI is configured with appropriate permissions
-- Verify access to required AWS services (S3, Lambda, ECS, Bedrock)
+**Docker Build Failures**: Ensure Docker Desktop is running before `cdk deploy`. Lambda containers require Docker for image builds.
 
-**Service Limits**
+**Service Limits**: Check [AWS service quotas](https://us-east-1.console.aws.amazon.com/servicequotas/) if deployment fails.
 
-- Check AWS service quotas if deployment fails
-- Request additional Elastic IPs if needed: [EC2 Service Quotas](https://us-east-1.console.aws.amazon.com/servicequotas/home/services/ec2/quotas)
-
-**Build Failures**
-
-- Check CodeBuild console for detailed error messages
-- Verify all prerequisites are met
-- Ensure Docker is available for PDF-to-HTML deployments
-
-### Solution-Specific Troubleshooting
-
-**PDF-to-PDF Issues**
-
-- Verify Adobe API credentials are correct and active
-- Check CloudWatch logs for Lambda functions and ECS tasks
-- Ensure NOVA_PRO Bedrock model access is granted
-
-**PDF-to-HTML Issues**
-
-- Verify Bedrock Data Automation permissions
-- Check Lambda function logs in CloudWatch
-- Ensure Docker image was pushed to ECR successfully
-
-### Getting Help
-
-- Check build logs in CodeBuild console
-- Review CloudWatch logs for runtime issues
-- Verify all prerequisites are met
-- For deployment issues, refer to: [CDK GitHub Issue](https://github.com/aws/aws-cdk/issues/30258)
-- For additional troubleshooting: [Troubleshooting Guide](docs/TROUBLESHOOTING_CDK_DEPLOY.md)
-- Contact support: **ai-cic@amazon.com**
+**CDK Deploy Issues**: See [CDK troubleshooting guide](docs/TROUBLESHOOTING_CDK_DEPLOY.md) and [CDK GitHub Issue #30258](https://github.com/aws/aws-cdk/issues/30258).
 
 ## Contributing
 
@@ -267,18 +200,9 @@ Contributions to this project are welcome. Please fork the repository and submit
 
 ## Acknowledgments
 
-The PDF-to-HTML remediation functionality in this project is adapted from AWS Labs' [Content Accessibility Utility on AWS](https://github.com/awslabs/content-accessibility-utility-on-aws). This version includes updates and enhancements tailored for integration within the PDF Accessibility backend.
+- Originally developed by Arizona State University's AI Cloud Innovation Center (AI CIC), powered by AWS.
+- The PDF-to-HTML remediation functionality is adapted from AWS Labs' [Content Accessibility Utility on AWS](https://github.com/awslabs/content-accessibility-utility-on-aws).
 
 ---
 
-## Support
-
-For questions, issues, or support:
-
-- **Email**: ai-cic@amazon.com
-- **Issues**: [GitHub Issues](https://github.com/ASUCICREPO/PDF_Accessibility/issues)
-
----
-
-**Built by Arizona State University's AI Cloud Innovation Center (AI CIC)**  
-**Powered by AWS**
+**Maintained by [CUNY AI Lab](https://ailab.gc.cuny.edu)**
