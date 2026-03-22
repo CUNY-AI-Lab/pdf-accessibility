@@ -24,19 +24,40 @@ Both solutions leverage AWS services and generative AI to improve content access
 
 ## Architecture Overview
 
-The following architecture diagram illustrates the various AWS components utilized to deliver the solution.
-
-![Architecture Diagram](docs/images/architecture.png)
-
 ### PDF-to-PDF Pipeline
 
 ```
-S3 Upload (pdf/) → PDF Splitter → Step Functions Parallel:
-  Branch 1: Map(AI Tagger → Alt-Text Generator) → Merger → Title Generator → Post-Check
-  Branch 2: Pre-Check (audits original PDF)
+                                    ┌─────────────────────────────────────────────────────────┐
+                                    │                   Step Functions                        │
+                                    │                                                         │
+                                    │  ┌───────────────────────────────────────────────────┐  │
+                                    │  │              Map State (per chunk)                 │  │
+ ┌──────────┐    ┌──────────────┐   │  │  ┌─────────────┐    ┌──────────────────────────┐  │  │
+ │  User     │    │ PDF Splitter │   │  │  │  AI Tagger  │───▶│  Alt-Text Generator      │  │  │
+ │  uploads  │───▶│   Lambda     │──▶│  │  │  (Bedrock   │    │  (Bedrock vision + text) │  │  │
+ │  to S3    │    │ (5-pg chunks)│   │  │  │   vision)   │    │                          │  │  │
+ │  pdf/     │    └──────────────┘   │  │  └─────────────┘    └──────────────────────────┘  │  │
+ └──────────┘                       │  └───────────────────────────────────────────────────┘  │
+                                    │         │                                               │
+                                    │         ▼                                               │
+                                    │  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐   │
+                                    │  │ PDF Merger   │─▶│   Title     │─▶│  Post-Check   │   │
+                                    │  │ (pikepdf)    │  │  Generator  │  │  (27 checks)  │   │
+                                    │  └─────────────┘  └─────────────┘  └───────────────┘   │
+                                    │                                                         │
+                                    │  ┌───────────────────────────────────────────────────┐  │
+                                    │  │  Pre-Check (audits original PDF — runs parallel)  │  │
+                                    │  └───────────────────────────────────────────────────┘  │
+                                    └─────────────────────────────────────────────────────────┘
+                                                                              │
+                                                                              ▼
+                                                                    ┌─────────────────┐
+                                                                    │  result/ in S3   │
+                                                                    │  COMPLIANT_*.pdf │
+                                                                    └─────────────────┘
 ```
 
-All processing is serverless using AWS Lambda (Docker containers). AI-powered tagging and alt-text generation use Amazon Bedrock vision and text models via the Converse API.
+All processing is serverless using AWS Lambda (Docker containers). AI-powered tagging and alt-text generation use Amazon Bedrock vision and text models via the Converse API. A CloudWatch dashboard provides per-file monitoring.
 
 ### Key Components
 
