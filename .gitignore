@@ -43,3 +43,5 @@ pdf_ui/build/
 
 # Screenshots (not needed in repo)
 *.png
+.offline-backup/
+docs/OFFLINE_STATE.md

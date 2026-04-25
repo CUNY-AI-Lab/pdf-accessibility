@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Current Deployment State
+
+**The deployed stack is OFFLINE as of 2026-04-25.** Pipeline trigger removed and Amplify frontend gated behind basic auth — both reversible. See `docs/OFFLINE_STATE.md` for the bring-online runbook, idle-cost breakdown, and resource references (Amplify app id, bucket name, state machine ARN, live Cognito pool).
+
+Backups for the offline action live in `.offline-backup/` (gitignored).
+
 ## Project Overview
 
 PDF Accessibility Solutions: an AWS-based tool that remediates PDFs for WCAG 2.1 Level AA compliance. Two approaches exist side-by-side:
