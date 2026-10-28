@@ -101,6 +101,7 @@ class Pdf2HtmlStack extends Stack {
         'logs:PutLogEvents'
       ],
       resources: [
+        `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/Pdf2HtmlPipeline`,
         `arn:aws:logs:${this.region}:${this.account}:log-group:/aws/lambda/Pdf2HtmlPipeline:*`,
       ],
     }));
